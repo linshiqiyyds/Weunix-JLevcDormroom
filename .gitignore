@@ -35,6 +35,10 @@ build/
 *.zip
 *.msi
 
+# Local release bundles
+release_packages/
+_release_runtime_cache/
+
 # Local/proprietary font files
 *.ttf
 
