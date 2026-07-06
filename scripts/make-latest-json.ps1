@@ -36,5 +36,5 @@ $payload = [ordered]@{
 $json = $payload | ConvertTo-Json -Depth 8
 $dir = Split-Path -Parent $outFile
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-Set-Content -LiteralPath $outFile -Value $json -Encoding UTF8
+[System.IO.File]::WriteAllText($outFile, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 Write-Host "latest.json written to $outFile"
