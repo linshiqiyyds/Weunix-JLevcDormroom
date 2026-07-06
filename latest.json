@@ -1,0 +1,11 @@
+﻿{
+    "version":  "0.2.0",
+    "notes":  "WeUnix desktop update.",
+    "pub_date":  "2026-07-06T16:28:50Z",
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUi9jUmtUU3ZDYkNwOHZoOHFBZ3E4QWJwMGl3SkR1UG1FVHZ3RDdtYnVJazNrTFIzS0JRSW1ZUGwzTHdYTjNtMERuRUxkc3pCU05sMmt4NTdyWU5hUVUrN2daTW56aVFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzMzUzMTgyCWZpbGU6V2VVbml4XzAuMi4wX3g2NF96aC1DTi5tc2kKU1ZBL3YxM3dpYWkrdXpiMnFrL05saFYyaklIaTJDWklsM3U3M0NBcHcvd09UQlcyTVl1VVBvSU1GVkxEL0ViRmNDYlcvSzVRZDZrWmZCM3poc080Q0E9PQo=",
+                                             "url":  "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/releases/download/v0.2.0/WeUnix_0.2.0_x64_zh-CN.msi"
+                                         }
+                  }
+}

@@ -776,6 +776,104 @@ select.input-line option {
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
+.update-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.update-card::after {
+  position: absolute;
+  inset: -40% -20% auto 46%;
+  height: 220px;
+  content: "";
+  background: radial-gradient(circle, rgba(223, 255, 79, 0.12), transparent 62%);
+  pointer-events: none;
+}
+
+.update-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.update-stat {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 13px 14px;
+}
+
+.update-stat span {
+  display: block;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+}
+
+.update-stat strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-sources {
+  display: grid;
+  gap: 8px;
+}
+
+.update-source-row {
+  display: grid;
+  min-height: 36px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.032);
+  padding: 0 12px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+}
+
+.update-source-row em {
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.source-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.84);
+  box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.08);
+}
+
+.source-dot-primary {
+  background: #dfff4f;
+  box-shadow: 0 0 0 4px rgba(223, 255, 79, 0.11);
+}
+
+.update-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(223, 255, 79, 0.92), rgba(125, 211, 252, 0.86));
+  box-shadow: 0 0 24px rgba(223, 255, 79, 0.2);
+  transition: width 180ms ease;
+}
+
 @keyframes helloColor {
   from {
     background-position: 0% 50%;
@@ -864,6 +962,10 @@ select.input-line:focus {
   }
 
   .strategy-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .settings-grid {
     grid-template-columns: 1fr !important;
   }
 

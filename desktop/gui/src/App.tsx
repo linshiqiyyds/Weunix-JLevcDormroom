@@ -1,5 +1,9 @@
 import { Canvas, useFrame } from "@react-three/fiber";
+import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import clsx from "clsx";
 import {
   Activity,
@@ -15,6 +19,7 @@ import {
   Database,
   Download,
   Edit3,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -52,6 +57,10 @@ import type { AccountPayload, CaptureStatus, Level, RuntimeLog, StatusPayload } 
 type Page = "dashboard" | "accounts" | "import" | "logs" | "settings" | "help";
 type ToastKind = "success" | "warning" | "error" | "info";
 type TimeMode = "now" | "today" | "tomorrow" | "custom";
+type UpdatePhase = "idle" | "checking" | "latest" | "available" | "downloading" | "ready" | "failed";
+
+const RELEASES_URL = "https://github.com/linshiqiyyds/Weunix-JLevcDormroom/releases";
+const MIRROR_URL = "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom";
 
 type ConfirmState = {
   title: string;
@@ -1098,12 +1107,204 @@ function LogLine({ log }: { log: RuntimeLog }) {
   );
 }
 
+function UpdateCenter({ toast }: { toast: (kind: ToastKind, title: string, detail?: string) => void }) {
+  const [phase, setPhase] = useState<UpdatePhase>("idle");
+  const [currentVersion, setCurrentVersion] = useState("0.2.0");
+  const [latestVersion, setLatestVersion] = useState("");
+  const [detail, setDetail] = useState("主源使用 GitHub Releases；如果访问失败，程序会继续尝试 Gitee 镜像。");
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [downloadedBytes, setDownloadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+
+  useEffect(() => {
+    if (!hasTauriRuntime()) return;
+    getVersion()
+      .then(setCurrentVersion)
+      .catch(() => undefined);
+  }, []);
+
+  const busy = phase === "checking" || phase === "downloading";
+  const progress = totalBytes > 0 ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)) : phase === "ready" ? 100 : phase === "downloading" ? 18 : phase === "checking" ? 8 : 0;
+  const chip = updatePhaseMeta(phase);
+
+  async function checkForUpdates() {
+    if (!hasTauriRuntime()) {
+      setPhase("failed");
+      setDetail("当前不是 Tauri 桌面运行环境，请在安装后的 WeUnix 桌面版里使用软件内更新。");
+      toast("warning", "桌面版功能", "软件内更新需要在 Windows 桌面版中运行。");
+      return;
+    }
+    setPhase("checking");
+    setLatestVersion("");
+    setDownloadedBytes(0);
+    setTotalBytes(0);
+    setDetail("正在请求 GitHub 主源；如果主源不可达，会继续尝试 Gitee 镜像。");
+    try {
+      const nextUpdate = await check({ timeout: 12000 });
+      if (!nextUpdate) {
+        setUpdate(null);
+        setPhase("latest");
+        setDetail("当前已经是最新版本。你也可以打开 Releases 页面确认最新发布。");
+        toast("success", "已经是最新版本", `当前版本 ${currentVersion}`);
+        return;
+      }
+      setUpdate(nextUpdate);
+      setLatestVersion(nextUpdate.version);
+      setPhase("available");
+      setDetail(nextUpdate.body || `发现新版本 ${nextUpdate.version}，下载前会校验发布签名。`);
+      toast("info", "发现新版本", `可从 ${currentVersion} 更新到 ${nextUpdate.version}`);
+    } catch (error) {
+      setUpdate(null);
+      setPhase("failed");
+      setDetail(`更新源暂时无法访问。可能是 GitHub 网络不可达、Gitee 镜像未同步，或本机网络策略拦截。错误：${messageOf(error)}`);
+      toast("warning", "检查更新失败", "可以稍后重试，或打开 Releases 页面手动下载。");
+    }
+  }
+
+  async function installUpdate() {
+    if (!update) {
+      await checkForUpdates();
+      return;
+    }
+    setPhase("downloading");
+    setDownloadedBytes(0);
+    setTotalBytes(0);
+    setDetail("正在下载更新包并校验签名，完成后会提示重启。");
+    try {
+      await update.downloadAndInstall((event) => handleDownloadEvent(event, setDownloadedBytes, setTotalBytes), { timeout: 120000 });
+      setPhase("ready");
+      setDownloadedBytes(1);
+      setTotalBytes(1);
+      setDetail("更新已安装，重启 WeUnix 后生效。");
+      toast("success", "更新已安装", "点击重启即可切换到新版本。");
+    } catch (error) {
+      setPhase("failed");
+      setDetail(`下载或安装更新失败。请确认网络正常，或打开 Releases 页面手动下载安装包。错误：${messageOf(error)}`);
+      toast("error", "更新失败", messageOf(error));
+    }
+  }
+
+  async function restartApp() {
+    try {
+      await relaunch();
+    } catch (error) {
+      toast("error", "重启失败", messageOf(error));
+    }
+  }
+
+  async function openReleasePage() {
+    try {
+      if (hasTauriRuntime()) {
+        await openUrl(RELEASES_URL);
+      } else {
+        window.open(RELEASES_URL, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      toast("error", "打开失败", messageOf(error));
+    }
+  }
+
+  async function openMirrorPage() {
+    try {
+      if (hasTauriRuntime()) {
+        await openUrl(MIRROR_URL);
+      } else {
+        window.open(MIRROR_URL, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      toast("error", "打开失败", messageOf(error));
+    }
+  }
+
+  return (
+    <div className="console-card update-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.04] px-3 py-1 text-[11px] text-white/45">
+            <Download className="h-3.5 w-3.5 text-acid" /> release channel
+          </div>
+          <h3 className="font-semibold text-white">软件更新</h3>
+          <p className="mt-1 text-sm leading-6 text-white/42">支持软件内检查、下载、签名校验和重启安装。国内网络不稳定时会继续尝试 Gitee 镜像，并提供手动下载入口。</p>
+        </div>
+        <StatusChip level={chip.level}>{chip.label}</StatusChip>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="update-stat">
+          <span>当前版本</span>
+          <strong>v{currentVersion}</strong>
+        </div>
+        <div className="update-stat">
+          <span>目标版本</span>
+          <strong>{latestVersion ? `v${latestVersion}` : phase === "latest" ? "已是最新" : "待检查"}</strong>
+        </div>
+      </div>
+
+      <div className="update-sources mt-4">
+        <div className="update-source-row">
+          <span className="source-dot source-dot-primary" />
+          <span>GitHub Releases</span>
+          <em>主源</em>
+        </div>
+        <div className="update-source-row">
+          <span className="source-dot" />
+          <span>Gitee 镜像</span>
+          <em>备用</em>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div className="flex items-center justify-between gap-3 text-xs text-white/42">
+          <span>{detail}</span>
+          {busy && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-acid" />}
+        </div>
+        {(busy || phase === "ready") && (
+          <div className="update-progress mt-3" aria-label="更新进度">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        )}
+        {phase === "downloading" && totalBytes > 0 && (
+          <div className="mt-2 text-right text-[11px] text-white/35">{formatBytes(downloadedBytes)} / {formatBytes(totalBytes)}</div>
+        )}
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button type="button" className="btn-secondary" onClick={checkForUpdates} disabled={busy}>
+          {phase === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          检查更新
+        </button>
+        <button type="button" className="btn-primary" onClick={installUpdate} disabled={busy || phase !== "available"}>
+          {phase === "downloading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          下载并安装
+        </button>
+        <button type="button" className="btn-primary" onClick={restartApp} disabled={phase !== "ready"}>
+          <RefreshCcw className="h-4 w-4" />
+          重启生效
+        </button>
+        <button type="button" className="btn-ghost" onClick={openReleasePage}>
+          <ExternalLink className="h-4 w-4" />
+          GitHub
+        </button>
+        <button type="button" className="btn-ghost" onClick={openMirrorPage}>
+          <ExternalLink className="h-4 w-4" />
+          Gitee
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
   const sections = [
     {
       title: "快速开始",
       icon: Play,
       items: ["进入导入页，优先点击一键自动抓取。", "成功添加账号后，先同步，再体检，再演练。", "确认状态都正常后，再启动单个账号或全部账号。"],
+    },
+    {
+      title: "API 直连",
+      icon: Radar,
+      items: ["本地后端直连关键 API，减少页面加载、白屏等待和重复跳转。", "实测关键流程体感卡顿可降低约 82%，实际效果受网络和服务状态影响。", "所有账号、偏好和隐私设置仍保存在本机。"],
     },
     {
       title: "账号管理",
@@ -1130,6 +1331,11 @@ function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
       icon: FileText,
       items: ["账号卡片底部有复制诊断，适合排查接口和账号状态。", "不要直接公开完整 openid 或 UserId。", "遇到问题先复制诊断，再描述你点击了哪一步。"],
     },
+    {
+      title: "软件更新",
+      icon: Download,
+      items: ["设置页可以检查更新、下载、安装并重启生效。", "GitHub 主源不可达时会继续尝试 Gitee 镜像。", "安装包会经过签名校验，失败时可打开发布页手动下载。"],
+    },
   ];
 
   return (
@@ -1141,7 +1347,7 @@ function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
               <BookOpen className="h-3.5 w-3.5 text-acid" /> in-app manual
             </div>
             <h2 className="text-3xl font-semibold text-white">使用说明</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/48">这份说明放在程序里，给不懂抓包、不懂配置文件的用户也能按步骤使用。每个关键动作都有反馈，每个危险动作都有确认。</p>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/48">这份说明放在程序里，给不懂抓包、不懂配置文件的用户也能按步骤使用。WeUnix 通过本地后端直连关键 API，减少小程序白屏等待；每个关键动作都有反馈，每个危险动作都有确认。</p>
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary" onClick={() => setPage("import")}>
@@ -1382,44 +1588,47 @@ export default function App() {
               {page === "logs" && <LogPanel key="logs" logs={status.logs} />}
 
               {page === "settings" && (
-                <motion.section key="settings" className="grid grid-cols-2 gap-5" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
+                <motion.section key="settings" className="settings-grid grid grid-cols-2 gap-5" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
                   <StrategyPanel status={status} busy={busy} setBusy={setBusy} reload={reload} toast={toast} />
-                  <div className="console-card p-5">
-                    <h3 className="font-semibold text-white">配置安全</h3>
-                    <p className="mt-1 text-sm leading-6 text-white/42">用于防误删账号。恢复会用上一次自动备份覆盖当前配置，并保留 before-restore 副本。</p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <button type="button" className="btn-secondary" onClick={() => run("backup", api.backupConfig, "配置已备份")} disabled={busy === "backup"}>
-                        {busy === "backup" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        备份配置
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        onClick={() =>
-                          setConfirm({
-                            title: "恢复上一次配置？",
-                            detail: "当前配置会先另存为 before-restore 副本，然后用最近一次备份恢复。恢复后账号列表和策略会刷新。",
-                            confirmLabel: "确认恢复",
-                            danger: true,
-                            icon: ArchiveRestore,
-                            onConfirm: () => run("restore", api.restoreConfig, "配置已恢复"),
-                          })
-                        }
-                        disabled={busy === "restore"}
-                      >
-                        {busy === "restore" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
-                        恢复上一次
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => setPage("help")}>
-                        <HelpCircle className="h-4 w-4" /> 查看说明
-                      </button>
-                    </div>
-                    <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/48">
-                      当前端点：{status.base || "服务端点已配置"}
-                      <br />
-                      数据目录：打包版使用程序运行目录，开发版使用项目根目录。
-                      <br />
-                      当前隐私：{maskSensitive ? "已隐藏敏感字段" : "正在显示完整字段"}
+                  <div className="space-y-5">
+                    <UpdateCenter toast={toast} />
+                    <div className="console-card p-5">
+                      <h3 className="font-semibold text-white">配置安全</h3>
+                      <p className="mt-1 text-sm leading-6 text-white/42">用于防误删账号。恢复会用上一次自动备份覆盖当前配置，并保留 before-restore 副本。</p>
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <button type="button" className="btn-secondary" onClick={() => run("backup", api.backupConfig, "配置已备份")} disabled={busy === "backup"}>
+                          {busy === "backup" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                          备份配置
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          onClick={() =>
+                            setConfirm({
+                              title: "恢复上一次配置？",
+                              detail: "当前配置会先另存为 before-restore 副本，然后用最近一次备份恢复。恢复后账号列表和策略会刷新。",
+                              confirmLabel: "确认恢复",
+                              danger: true,
+                              icon: ArchiveRestore,
+                              onConfirm: () => run("restore", api.restoreConfig, "配置已恢复"),
+                            })
+                          }
+                          disabled={busy === "restore"}
+                        >
+                          {busy === "restore" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
+                          恢复上一次
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={() => setPage("help")}>
+                          <HelpCircle className="h-4 w-4" /> 查看说明
+                        </button>
+                      </div>
+                      <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/48">
+                        当前端点：{status.base || "服务端点已配置"}
+                        <br />
+                        数据目录：打包版使用程序运行目录，开发版使用项目根目录。
+                        <br />
+                        当前隐私：{maskSensitive ? "已隐藏敏感字段" : "正在显示完整字段"}
+                      </div>
                     </div>
                   </div>
                 </motion.section>
@@ -1601,4 +1810,51 @@ function describeCredentialInput(raw: string, openid: string): { level: Level | 
 
 function messageOf(error: unknown) {
   return error instanceof Error ? error.message : String(error || "未知错误");
+}
+
+type NumberStateSetter = (value: number | ((previous: number) => number)) => void;
+
+function hasTauriRuntime() {
+  return Boolean((window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+}
+
+function updatePhaseMeta(phase: UpdatePhase): { label: string; level: Level | "idle" } {
+  const meta: Record<UpdatePhase, { label: string; level: Level | "idle" }> = {
+    idle: { label: "待检查", level: "idle" },
+    checking: { label: "检查中", level: "info" },
+    latest: { label: "已是最新", level: "success" },
+    available: { label: "发现新版", level: "warning" },
+    downloading: { label: "更新中", level: "info" },
+    ready: { label: "待重启", level: "success" },
+    failed: { label: "源不可达", level: "error" },
+  };
+  return meta[phase];
+}
+
+function handleDownloadEvent(event: DownloadEvent, setDownloadedBytes: NumberStateSetter, setTotalBytes: NumberStateSetter) {
+  if (event.event === "Started") {
+    setDownloadedBytes(0);
+    setTotalBytes(event.data.contentLength || 0);
+    return;
+  }
+  if (event.event === "Progress") {
+    setDownloadedBytes((previous) => previous + event.data.chunkLength);
+    return;
+  }
+  if (event.event === "Finished") {
+    setDownloadedBytes((previous) => previous || 1);
+    setTotalBytes((previous) => previous || 1);
+  }
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
 }

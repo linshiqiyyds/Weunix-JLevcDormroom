@@ -1,9 +1,12 @@
 # Runtime config and credentials
+.secrets/
 grabber_config.json
 grabber_config.json*
 *.bak
 *.private-backup-*
 *.corrupted.bak
+*.key
+*.pem
 
 # Logs and local diagnostics
 debug.log
