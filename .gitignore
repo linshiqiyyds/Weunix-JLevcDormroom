@@ -1,0 +1,59 @@
+# Runtime config and credentials
+grabber_config.json
+grabber_config.json*
+*.bak
+*.private-backup-*
+*.corrupted.bak
+
+# Logs and local diagnostics
+debug.log
+debug.log.*
+*.log
+exe_smoke_result.json
+probe_results.json
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Frontend dependencies and build output
+desktop/gui/node_modules/
+desktop/gui/dist/
+desktop/gui/src-tauri/target/
+
+# Build and packaging output
+dist/
+build/
+*.exe
+*.dll
+*.zip
+*.msi
+
+# Local/proprietary font files
+*.ttf
+
+# Legacy local packaging spec
+自动抢寝室.spec
+
+# Test and smoke-work directories
+output/
+.playwright-cli/
+_capture_smoke_workdir/
+_fulltest_sidecar_workdir/
+_tauri_workdir_smoke/
+_corrupt_backup_*/
+_quarantine_old_artifacts/
+
+# Local assistant/tooling state
+.agents/
+.claude/
+.codegraph/
+.codex/
+
+# OS/editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
