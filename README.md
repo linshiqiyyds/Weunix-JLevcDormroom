@@ -24,6 +24,10 @@ This repository intentionally does not track:
 
 Release binaries should be uploaded through GitHub Releases, not committed to Git.
 
+## License
+
+This project is open source under the [MIT License](LICENSE).
+
 ## Development
 
 Install frontend dependencies:
