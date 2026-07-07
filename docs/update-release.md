@@ -7,7 +7,7 @@
 ## 更新源策略
 
 - 主源：GitHub Releases
-- 备用源：Gitee 仓库中的 `latest.json`，文件内的下载地址指向 Gitee Releases 资产
+- 备用源：Gitee 仓库中的 `latest.json`，用于在 GitHub 元数据入口不可达时提供同一份更新清单
 - 手动兜底：程序内提供 Releases 页面入口，用户可以手动下载安装包
 
 客户端配置的元数据地址：
@@ -17,9 +17,9 @@ https://github.com/linshiqiyyds/Weunix-JLevcDormroom/releases/latest/download/la
 https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/raw/main/latest.json
 ```
 
-如果 GitHub 在国内访问失败，Tauri updater 会继续尝试 Gitee 备用端点。备用端点也不可用时，程序会显示失败原因，并引导用户打开 GitHub Releases 或 Gitee 镜像页面手动下载。
+如果 GitHub 的 `latest.json` 元数据入口访问失败，Tauri updater 会继续尝试 Gitee 仓库根目录的备用清单。Gitee Release 附件单文件限制为 100 MB，当前 Windows 安装包超过该限制，所以备用清单中的安装包下载地址仍以 GitHub Release 资产为准。两个端点都不可用时，程序会显示失败原因，并引导用户打开 Releases 页面手动下载。
 
-注意：Gitee 当前不等价支持 GitHub 的 `releases/latest/download/latest.json` 固定入口。更稳定的方式是在 Gitee 仓库根目录维护一份 `latest.json`，并让其中的安装包 URL 指向具体 tag 的 Gitee Release 资产。
+注意：Gitee 当前不等价支持 GitHub 的 `releases/latest/download/latest.json` 固定入口。更稳定的方式是在 Gitee 仓库根目录维护一份 `latest.json`；如果未来安装包能压到 100 MB 以下，或有新的国内对象存储，再把其中的安装包 URL 切换到国内镜像资产。
 
 ## 私钥安全
 
@@ -133,21 +133,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\make-latest-json.p
   -Notes "WeUnix desktop update."
 ```
 
-如果要生成 Gitee 镜像版本的 `latest.json`，把 `-MsiUrl` 改成 Gitee Release 里的安装包下载地址。
+如果要生成 Gitee 备用元数据，当前仍建议让 `-MsiUrl` 指向 GitHub Release 里的安装包下载地址，因为 Gitee Release 附件单文件不能超过 100 MB。未来如果有可用的国内安装包镜像，再把 `-MsiUrl` 改成对应地址。
 
 例如生成根目录的 Gitee 备用元数据：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\make-latest-json.ps1 `
   -Version "0.2.0" `
-  -MsiUrl "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/releases/download/v0.2.0/WeUnix_0.2.0_x64_zh-CN.msi" `
+  -MsiUrl "https://github.com/linshiqiyyds/Weunix-JLevcDormroom/releases/download/v0.2.0/WeUnix_0.2.0_x64_zh-CN.msi" `
   -OutputPath "latest.json" `
   -Notes "WeUnix desktop update."
 ```
 
 6. 同步到 Gitee 镜像
 
-把同一批 Release 资产同步到 Gitee 仓库 Release：`https://gitee.com/lin-seventeen/Weunix-JLevcDormroom`。`latest.json` 里的下载地址如果指向 GitHub，国内用户可能仍然下载失败；更稳的方式是让根目录的 `latest.json` 指向 Gitee 具体 tag 下的资产地址，然后提交并推送到 Gitee。
+把 README、源码、标签和根目录 `latest.json` 同步到 Gitee 仓库：`https://gitee.com/lin-seventeen/Weunix-JLevcDormroom`。由于 Gitee Release 附件存在 100 MB 单文件限制，当前不要把 `latest.json` 指向 Gitee 上并不存在的大体积安装包；确认有可下载的国内安装包镜像后再切换。
 
 ## 发布前检查
 
@@ -167,6 +167,6 @@ git grep -n -e "PRIVATE KEY" -e "BEGIN" -e "updater-private" -e "weunix-updater.
 
 - 有新版本：设置页会显示新版本号，可以下载并安装
 - 已是最新：设置页会显示“已是最新”
-- GitHub 不通：程序会继续尝试 Gitee 镜像
-- 两个源都失败：显示可读错误，并提供“手动下载”入口
+- GitHub 元数据入口不通：程序会继续尝试 Gitee 根目录 `latest.json`
+- 安装包下载失败：显示可读错误，并提供“手动下载”入口
 - 安装完成：提示重启 WeUnix 后生效
