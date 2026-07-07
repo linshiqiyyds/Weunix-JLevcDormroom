@@ -28,6 +28,15 @@ SETTING_API = "Setting"
 CFG = "grabber_config.json"
 MAX_ATTEMPTS = 3000
 RETRY_INTERVAL = 0.12
+PAYMENT_FAST_POLL_INTERVAL = 1.0
+PAYMENT_FAST_POLL_SECONDS = 30
+PAYMENT_POLL_INTERVAL = 3.0
+PAYMENT_POLL_SECONDS = 360
+BLACKBOX_DIR = os.path.join("output", "blackbox")
+ROOM_TYPE_ID_KEYS = ("room_type_id", "roomTypeId", "room_typeid", "roomTypeID", "type_id", "typeId", "id")
+ROOM_TYPE_KEYS = ("room_type", "roomType", "room_type_name", "roomTypeName", "type_name", "typeName", "name", "title")
+ROOM_BED_KEYS = ("room_bed_num", "room_bed_count", "roomBedNum", "roomBedCount", "bed_num", "bedNum", "remain", "surplus", "left_count", "available_count", "count")
+ROOM_CHARGE_KEYS = ("room_charge", "roomCharge", "charge", "price", "amount", "money", "need_pay_money", "pay_money")
 
 
 def service_api_path(path: str) -> str:
@@ -53,8 +62,11 @@ def setting_api_path(action: str) -> str:
 def service_view_path(fragment: str = "") -> str:
     return f"{_VIEW_ROOT}{fragment.lstrip('/')}"
 
-ROOM_PREF_OPTIONS = ("四人寝、八人寝", "四人寝", "八人寝", "不限")
+ROOM_PREF_OPTIONS = ("4人间、8人间", "4人间", "8人间", "不限")
 _ROOM_PREF_TO_IDS = {
+    "4人间、8人间": "1,2",
+    "4人间": "1",
+    "8人间": "2",
     "四人寝、八人寝": "1,2",
     "四人寝": "1",
     "八人寝": "2",
@@ -66,9 +78,9 @@ _ROOM_PREF_TO_IDS = {
     None: "",
 }
 _IDS_TO_ROOM_PREF = {
-    "1,2": "四人寝、八人寝",
-    "1": "四人寝",
-    "2": "八人寝",
+    "1,2": "4人间、8人间",
+    "1": "4人间",
+    "2": "8人间",
     "": "不限",
 }
 
@@ -86,6 +98,189 @@ def room_preference_label(pref) -> str:
 def pref_ids(pref) -> set[str]:
     normalized = normalize_room_preference(pref)
     return {p for p in normalized.split(",") if p}
+
+
+def first_present(data, *keys):
+    if not isinstance(data, dict):
+        return None
+    lower_map = {str(key).lower(): key for key in data.keys()}
+    for key in keys:
+        if key in data and data.get(key) not in (None, ""):
+            return data.get(key)
+        actual = lower_map.get(str(key).lower())
+        if actual is not None and data.get(actual) not in (None, ""):
+            return data.get(actual)
+    return None
+
+
+def iter_text_values(data, keys=None):
+    if not isinstance(data, dict):
+        return
+    source_keys = keys or tuple(data.keys())
+    for key in source_keys:
+        value = first_present(data, key)
+        if isinstance(value, (str, int, float)):
+            text = str(value).strip()
+            if text:
+                yield text
+
+
+def normalize_money_value(value):
+    if value in (None, ""):
+        return ""
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return str(int(number)) if number.is_integer() else str(number)
+    text = str(value).strip()
+    currency_match = re.search(r"[¥￥]\s*([0-9]+(?:\.[0-9]+)?)", text)
+    if currency_match:
+        return normalize_money_value(currency_match.group(1))
+    yuan_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*元", text)
+    if yuan_match:
+        return normalize_money_value(yuan_match.group(1))
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", text):
+        return normalize_money_value(float(text))
+    return text
+
+
+def parse_money_from_text(text):
+    return normalize_money_value(text)
+
+
+def canonical_room_type(text) -> str:
+    value = str(text or "").strip()
+    if any(mark in value for mark in ("4人", "四人")):
+        return "4人间"
+    if any(mark in value for mark in ("8人", "八人")):
+        return "8人间"
+    return value
+
+
+def room_type_id_value(room) -> str:
+    value = first_present(room, *ROOM_TYPE_ID_KEYS)
+    return str(value or "").strip()
+
+
+def room_type_text(room) -> str:
+    value = first_present(room, *ROOM_TYPE_KEYS)
+    return canonical_room_type(str(value or "").strip())
+
+
+def room_charge_value(room):
+    direct = first_present(room, *ROOM_CHARGE_KEYS)
+    parsed = normalize_money_value(direct)
+    if parsed:
+        return parsed
+    for text in iter_text_values(room, ROOM_TYPE_KEYS):
+        parsed = parse_money_from_text(text)
+        if parsed and parsed != text:
+            return parsed
+    return ""
+
+
+def room_charge_number(room):
+    value = room_charge_value(room)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def room_bed_count_value(room):
+    value = first_present(room, *ROOM_BED_KEYS)
+    if value in (None, ""):
+        for text in iter_text_values(room, ROOM_TYPE_KEYS):
+            match = re.search(r"(?:剩余|余)\s*([0-9]+)\s*(?:间|个|套|床)?", text)
+            if match:
+                value = match.group(1)
+                break
+        else:
+            return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def room_matches_preference(room, pref) -> bool:
+    ids = pref_ids(pref)
+    if not ids or ids == {"1", "2"}:
+        return True
+    rid = room_type_id_value(room)
+    label = room_type_text(room)
+    if rid and rid in ids:
+        return True
+    if "1" in ids and any(mark in label for mark in ("4", "四")):
+        return True
+    if "2" in ids and any(mark in label for mark in ("8", "八")):
+        return True
+    return False
+
+
+def normalize_room_for_order(room):
+    return {
+        "room_type_id": room_type_id_value(room),
+        "room_type": room_type_text(room),
+        "room_charge": room_charge_value(room),
+    }
+
+
+def find_first_list(obj):
+    if isinstance(obj, list):
+        return obj
+    if isinstance(obj, dict):
+        for key in ("result", "data", "rows", "list", "items", "records", "Data", "Result"):
+            value = obj.get(key)
+            found = find_first_list(value)
+            if isinstance(found, list):
+                return found
+        for value in obj.values():
+            found = find_first_list(value)
+            if isinstance(found, list):
+                return found
+    return []
+
+
+def mask_blackbox_value(value, key=""):
+    lowered = str(key or "").lower()
+    sensitive = (
+        lowered in {"name", "student_name", "username", "user_name"}
+        or any(part in lowered for part in ("openid", "wxopid", "token", "usercard", "id_number", "phone", "mobile", "card"))
+    )
+    if isinstance(value, dict):
+        return {k: mask_blackbox_value(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [mask_blackbox_value(item, key) for item in value[:20]]
+    if isinstance(value, str):
+        if value.startswith(("http://", "https://")):
+            return "<url>"
+        if sensitive and len(value) > 8:
+            return f"{value[:3]}...{value[-3:]}"
+        if len(value) > 240:
+            return value[:237] + "..."
+    return value
+
+
+def write_blackbox_snapshot(account_uid, event, payload):
+    try:
+        os.makedirs(BLACKBOX_DIR, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        safe_event = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(event or "event")).strip("_") or "event"
+        safe_uid = re.sub(r"[^A-Za-z0-9_.-]+", "", str(account_uid or "global"))[:16] or "global"
+        path = os.path.join(BLACKBOX_DIR, f"{stamp}_{safe_uid}_{safe_event}.json")
+        data = {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "event": safe_event,
+            "account_uid": safe_uid,
+            "payload": mask_blackbox_value(payload),
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return path
+    except Exception:
+        return ""
 
 
 def extract_openid_like(raw: str) -> str:
@@ -164,6 +359,92 @@ def deep_get(obj, *keys):
     return None
 
 
+def extract_order_id(data):
+    if isinstance(data, dict):
+        order_id = deep_get(data, "order_id", "orderid", "OrderId", "OrderNo", "id")
+        if order_id not in (None, ""):
+            return str(order_id)
+        result = data.get("result") or data.get("data") or data.get("Data") or data.get("Result")
+        if isinstance(result, (str, int)) and str(result).strip():
+            return str(result).strip()
+        if isinstance(result, dict):
+            nested = deep_get(result, "order_id", "orderid", "OrderId", "OrderNo", "id")
+            return str(nested) if nested not in (None, "") else ""
+    if isinstance(data, (str, int)) and str(data).strip():
+        return str(data).strip()
+    return ""
+
+
+def extract_pay_url(data):
+    if isinstance(data, str):
+        text = data.strip()
+        return text if text.startswith(("http://", "https://")) else ""
+    if isinstance(data, dict):
+        pay_url = deep_get(data, "pay_url", "payUrl", "PayUrl", "url", "Url", "pay_links")
+        if pay_url:
+            return str(pay_url)
+        result = data.get("result") or data.get("data") or data.get("Data") or data.get("Result")
+        if isinstance(result, str) and result.strip().startswith(("http://", "https://")):
+            return result.strip()
+        if isinstance(result, dict):
+            return extract_pay_url(result)
+    return ""
+
+
+def coerce_int(value, default=None):
+    try:
+        if value in (None, ""):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def payment_state(record, has_order=False):
+    if not isinstance(record, dict):
+        return ("pending", "等待付款") if has_order else ("waiting", "等待订单")
+    status = str(record.get("pay_status") if record.get("pay_status") is not None else "").strip()
+    rest_seconds = coerce_int(record.get("rest_seconds"))
+    if status == "1":
+        return "paid", "支付成功"
+    if status == "0":
+        if rest_seconds is not None and rest_seconds <= 0:
+            return "expired", "订单已过期"
+        return "pending", "待支付"
+    return "unknown", "状态未知"
+
+
+def payment_record_payload(record=None, room=None, order_id="", pay_url="", message=""):
+    record = record if isinstance(record, dict) else {}
+    room = room if isinstance(room, dict) else {}
+    order_id = str(record.get("id") or order_id or "")
+    pay_url = extract_pay_url(record) or str(pay_url or "")
+    state, label = payment_state(record if record else None, bool(order_id or pay_url))
+    rest_seconds = coerce_int(record.get("rest_seconds"))
+    return {
+        "room": room,
+        "order_id": order_id,
+        "pay_url": pay_url,
+        "message": message,
+        "payment_state": state,
+        "state_label": label,
+        "pay_status": record.get("pay_status"),
+        "rest_seconds": rest_seconds,
+        "paid": state == "paid",
+        "expired": state == "expired",
+        "room_type": record.get("room_type") or room.get("room_type") or room.get("roomType") or room_type_text(room),
+        "need_pay_money": record.get("need_pay_money") or room_charge_value(room),
+        "pay_money": record.get("pay_money") or "",
+        "order_create_time": record.get("order_create_time") or "",
+        "order_end_time": record.get("order_end_time") or "",
+        "pay_time": record.get("pay_time") or "",
+        "valid_duration": coerce_int(record.get("valid_duration")),
+        "room_no": record.get("room_no") or "",
+        "bed_no": record.get("bed_no") or "",
+        "bed_id": record.get("bed_id") or "",
+    }
+
+
 def extract_token(data):
     token = deep_get(data, "TokenContent", "token", "access_token")
     if token:
@@ -220,21 +501,25 @@ def is_success(data):
 
 def analyze_order_response(data):
     if not isinstance(data, dict):
+        order_id = extract_order_id(data)
+        pay_url = extract_pay_url(data)
+        if order_id or pay_url:
+            return True, order_id, pay_url, "订单已创建"
         return False, "", "", "下单接口返回格式异常"
     code = data.get("code")
     message = data.get("msg") or data.get("ErrorReason") or data.get("message") or ""
     if code == -1:
         return False, "", "", message or "服务器拒绝下单"
-    order_id = deep_get(data, "order_id", "orderid", "OrderId", "id", "OrderNo") or ""
-    pay_url = deep_get(data, "pay_url", "payUrl", "PayUrl", "url", "Url") or ""
+    order_id = extract_order_id(data)
+    pay_url = extract_pay_url(data)
     success_signal = code in (None, 1, 0) and not any(s in str(message) for s in ("失败", "错误", "未开放"))
     if success_signal or order_id or pay_url:
-        return True, str(order_id), str(pay_url), message or "已提交订单"
+        return True, str(order_id or ""), str(pay_url or ""), message or "已提交订单"
     return False, "", "", message or "未能创建订单"
 
 
 def default_config():
-    return {"accounts": [], "open_time": "", "pref": "1,2", "mask_sensitive": True}
+    return {"accounts": [], "open_time": "", "pref": "1", "mask_sensitive": True}
 
 
 def load_cfg(path=CFG):
@@ -252,9 +537,9 @@ def load_cfg(path=CFG):
     if not isinstance(data, dict):
         return default_config()
     if "accounts" not in data:
-        data = {"accounts": [], "open_time": data.get("open_time", ""), "pref": data.get("pref", "1,2")}
+        data = {"accounts": [], "open_time": data.get("open_time", ""), "pref": data.get("pref", "1")}
     data.setdefault("open_time", "")
-    data.setdefault("pref", "1,2")
+    data.setdefault("pref", "1")
     data.setdefault("accounts", [])
     data.setdefault("mask_sensitive", True)
     return data
@@ -400,16 +685,26 @@ class GrabberEngine:
         self.emit("log", f"身份信息已同步：{self.account.display_name}", "success")
         return data
 
-    def fetch_rooms(self):
-        self.emit("status", "正在读取资源")
-        data = request_json(self.session, room_api_path("GetRoomCosts"))
+    def record_blackbox(self, event, payload):
+        threading.Thread(target=write_blackbox_snapshot, args=(self.account.uid, event, payload), daemon=True).start()
+
+    def fetch_rooms(self, quiet=False):
+        if not quiet:
+            self.emit("status", "正在读取资源")
+        data = request_json(self.session, room_api_path("GetroomCosts"))
+        if data.get("code") != 1:
+            data = request_json(self.session, room_api_path("GetRoomCosts"))
         if data.get("code") != 1:
             raise RuntimeError(api_message(data, "资源获取失败", "资源接口"))
-        rooms = data.get("result") or []
+        rooms = find_first_list(data)
         if not isinstance(rooms, list):
             rooms = []
-        self.emit("rooms", rooms)
-        self.emit("log", f"资源已刷新：{len(rooms)} 条", "info")
+        if rooms:
+            self.record_blackbox("rooms_nonzero", {"count": len(rooms), "raw": data, "normalized": [normalize_room_for_order(room) for room in rooms[:10] if isinstance(room, dict)]})
+        if not quiet or rooms:
+            self.emit("rooms", rooms)
+        if not quiet or rooms:
+            self.emit("log", f"资源已刷新：{len(rooms)} 条", "info")
         return rooms
 
     def preflight_network(self, pref=""):
@@ -482,6 +777,9 @@ class GrabberEngine:
                 self.login()
                 self.fetch_student_info()
                 self.fetch_rooms()
+                snapshot = self.payment_snapshot(message="订单状态已同步")
+                if snapshot.get("order_id"):
+                    self.emit("payment", snapshot)
                 self.emit("status", "就绪")
             except Exception as exc:
                 self.emit("error", friendly_error(exc), "error")
@@ -540,36 +838,140 @@ class GrabberEngine:
             if remain <= 0:
                 return
             self.emit("status", f"等待开放 T-{int(remain)}s")
-            time.sleep(min(1, max(0.1, remain)))
+            if remain <= 2:
+                time.sleep(min(0.05, max(0.005, remain)))
+            else:
+                time.sleep(min(0.5, max(0.05, remain)))
 
     def pick_room(self, rooms, pref):
-        ids = pref_ids(pref)
         candidates = []
         for room in rooms:
-            rid = str(room.get("room_type_id") or room.get("roomTypeId") or "")
-            beds = int(room.get("room_bed_num") or room.get("room_bed_count") or room.get("bed_num") or 0)
-            if ids and rid not in ids:
+            if not isinstance(room, dict):
                 continue
-            if beds <= 0:
+            beds = room_bed_count_value(room)
+            if beds is not None and beds <= 0:
                 continue
             candidates.append(room)
-        return candidates[0] if candidates else None
+            if not room_matches_preference(room, pref):
+                continue
+            return room
+        ids = pref_ids(pref)
+        priced = [(room_charge_number(room), room) for room in candidates]
+        priced = [(price, room) for price, room in priced if price is not None]
+        if len({price for price, _ in priced}) >= 2:
+            priced.sort(key=lambda item: item[0])
+            if ids == {"1"}:
+                return priced[-1][1]
+            if ids == {"2"}:
+                return priced[0][1]
+        return candidates[0] if candidates and (not ids or ids == {"1", "2"}) else None
+
+    def order_student_id(self):
+        return str(self.account.user_id or self.account.student_id or "").strip()
+
+    def fetch_pay_records(self):
+        student_id = self.order_student_id()
+        if not student_id:
+            return []
+        data = request_json(self.session, room_api_path("Get_PayRecord"), params={"student_id": student_id})
+        if data.get("code") != 1:
+            return []
+        records = data.get("result") or []
+        return records if isinstance(records, list) else []
+
+    def latest_unpaid_order(self):
+        records = self.fetch_pay_records()
+        for record in records:
+            if isinstance(record, dict) and str(record.get("pay_status")) == "0":
+                return record
+        return None
+
+    def find_payment_record(self, records, order_id=""):
+        if not isinstance(records, list):
+            return None
+        order_id = str(order_id or "")
+        if order_id:
+            for record in records:
+                if isinstance(record, dict) and str(record.get("id") or "") == order_id:
+                    return record
+        for record in records:
+            if isinstance(record, dict) and str(record.get("pay_status")) == "0":
+                return record
+        return next((record for record in records if isinstance(record, dict)), None)
+
+    def resolve_pay_url(self, order_id):
+        if not order_id:
+            return ""
+        data = request_json(self.session, room_api_path("GetPayUrl"), params={"orderno": order_id})
+        return extract_pay_url(data)
+
+    def payment_snapshot(self, order_id="", room=None, pay_url="", message=""):
+        records = self.fetch_pay_records()
+        record = self.find_payment_record(records, order_id)
+        payload = payment_record_payload(record, room, order_id, pay_url, message)
+        payload["records_count"] = len(records) if isinstance(records, list) else 0
+        return payload
+
+    def watch_payment_status(self, order_id="", room=None, pay_url="", message=""):
+        started = time.monotonic()
+        deadline = time.monotonic() + PAYMENT_POLL_SECONDS
+        self.emit("log", "已停止抢单请求，进入支付追踪：前 30 秒快速确认，之后低频轮询。", "info")
+        while not self.stop_event.is_set():
+            payload = self.payment_snapshot(order_id, room, pay_url, message)
+            self.emit("payment", payload)
+            state = payload.get("payment_state")
+            if state == "paid":
+                self.emit("status", "支付成功")
+                detail = f"{payload.get('room_no') or '房间待同步'} · {payload.get('bed_no') or '床位待同步'}"
+                self.emit("log", f"支付已确认：{detail}", "success")
+                return
+            if state == "expired":
+                self.emit("status", "订单已过期")
+                self.emit("log", "订单未在有效期内完成支付，已过期；如仍需选择，请重新启动任务。", "warning")
+                return
+            if time.monotonic() >= deadline:
+                self.emit("status", "等待支付确认超时")
+                self.emit("log", "已停止自动轮询支付状态；如已付款，请点击同步刷新订单结果。", "warning")
+                return
+            rest = payload.get("rest_seconds")
+            if isinstance(rest, int) and rest > 0:
+                self.emit("status", f"待支付，剩余 {rest}s")
+            elif payload.get("pay_url"):
+                self.emit("status", "待支付，等待完成付款")
+            else:
+                self.emit("status", "订单已创建，等待支付链接")
+            interval = PAYMENT_FAST_POLL_INTERVAL if time.monotonic() - started < PAYMENT_FAST_POLL_SECONDS else PAYMENT_POLL_INTERVAL
+            time.sleep(interval)
 
     def create_order(self, room):
+        student_id = self.order_student_id()
+        if not student_id:
+            raise RuntimeError("缺少学生 UserId，无法创建订单。请先同步学生信息。")
+        normalized_room = normalize_room_for_order(room)
+        if not normalized_room["room_type_id"]:
+            self.record_blackbox("room_structure_missing_id", {"source_room": room, "normalized": normalized_room})
+            raise RuntimeError("房源结构缺少 room_type_id，已保存黑匣子快照，请检查开放瞬间返回。")
         payload = {
-            "student_id": self.account.student_id,
-            "room_type_id": room.get("room_type_id"),
-            "room_type": room.get("room_type"),
-            "need_pay_money": room.get("room_charge"),
+            "student_id": student_id,
+            "room_type_id": normalized_room["room_type_id"],
+            "room_type": normalized_room["room_type"],
+            "need_pay_money": normalized_room["room_charge"],
         }
+        self.record_blackbox("create_order_payload", {"payload": payload, "source_room": room})
         self.emit("status", "正在提交订单")
         data = request_json(self.session, room_api_path("CreateRoomOrder"), method="post", json=payload)
+        self.record_blackbox("create_order_response", {"payload": payload, "response": data})
         ok, order_id, pay_url, msg = analyze_order_response(data)
         if not ok:
             raise RuntimeError(msg)
+        unpaid = self.latest_unpaid_order()
+        if unpaid:
+            order_id = str(unpaid.get("id") or order_id or "")
+            pay_url = extract_pay_url(unpaid) or pay_url
         if not pay_url:
-            pay_data = request_json(self.session, room_api_path("GetPayUrl"), params={"order_id": order_id})
-            pay_url = str(deep_get(pay_data, "pay_url", "payUrl", "PayUrl", "url", "Url") or "")
+            pay_url = self.resolve_pay_url(order_id)
+        if not order_id and not pay_url:
+            self.emit("log", "订单接口已返回成功，但未带订单号或支付链接。为避免重复提交，已停止抢单请求，请点击同步确认订单记录。", "warning")
         return order_id, pay_url, msg
 
     def _grab_worker(self, open_time, pref):
@@ -585,16 +987,19 @@ class GrabberEngine:
             for attempt in range(1, MAX_ATTEMPTS + 1):
                 if self.stop_event.is_set():
                     break
-                self.emit("attempts", attempt)
-                rooms = self.fetch_rooms()
+                if attempt == 1 or attempt % 10 == 0:
+                    self.emit("attempts", attempt)
+                    self.emit("status", f"监控中，第 {attempt} 次")
+                rooms = self.fetch_rooms(quiet=True)
                 room = self.pick_room(rooms, pref)
                 if room:
+                    self.record_blackbox("selected_room", {"attempt": attempt, "room": room, "normalized": normalize_room_for_order(room), "pref": room_preference_label(pref)})
                     order_id, pay_url, msg = self.create_order(room)
-                    self.emit("payment", {"room": room, "order_id": order_id, "pay_url": pay_url, "message": msg})
-                    self.emit("status", "已锁定资源")
-                    self.emit("log", "已创建确认单，请尽快处理", "success")
+                    self.emit("payment", self.payment_snapshot(order_id, room, pay_url, msg))
+                    self.emit("status", "已锁定资源，停止抢单请求")
+                    self.emit("log", "已创建确认单，不再继续提交抢单请求；请尽快扫码支付。", "success")
+                    self.watch_payment_status(order_id, room, pay_url, msg)
                     return
-                self.emit("status", f"监控中，第 {attempt} 次")
                 time.sleep(RETRY_INTERVAL)
             if self.stop_event.is_set():
                 self.emit("status", "已停止")
@@ -632,7 +1037,9 @@ def run_real_smoke(wxopid: str, output_path: str = "exe_smoke_result.json") -> d
             "has_result": bool(student.get("result")),
         }
 
-        rooms_data = request_json(session, room_api_path("GetRoomCosts"))
+        rooms_data = request_json(session, room_api_path("GetroomCosts"))
+        if rooms_data.get("code") != 1:
+            rooms_data = request_json(session, room_api_path("GetRoomCosts"))
         rooms = rooms_data.get("result") or []
         result["rooms"] = {
             "code": rooms_data.get("code"),

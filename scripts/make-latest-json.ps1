@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Version,
 
-  [Parameter(Mandatory = $true)]
+  [string]$InstallerUrl,
   [string]$MsiUrl,
 
   [string]$SignaturePath = "desktop/gui/src-tauri/target/release/bundle/msi/WeUnix_$($Version)_x64_zh-CN.msi.sig",
@@ -11,6 +11,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+$assetUrl = if ($InstallerUrl) { $InstallerUrl } else { $MsiUrl }
+if (-not $assetUrl) {
+  throw "InstallerUrl is required. MsiUrl is still accepted for old release commands."
+}
 
 $root = Split-Path -Parent $PSScriptRoot
 $sigFile = Join-Path $root $SignaturePath
@@ -28,7 +33,7 @@ $payload = [ordered]@{
   platforms = [ordered]@{
     "windows-x86_64" = [ordered]@{
       signature = $signature
-      url = $MsiUrl
+      url = $assetUrl
     }
   }
 }

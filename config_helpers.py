@@ -8,7 +8,7 @@ from typing import Any
 DEFAULT_CONFIG: dict[str, Any] = {
     "accounts": [],
     "open_time": "",
-    "pref": "1,2",
+    "pref": "1",
     "mask_sensitive": True,
 }
 

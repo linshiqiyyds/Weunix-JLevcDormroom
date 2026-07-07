@@ -49,10 +49,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import * as THREE from "three";
 import { api } from "./api";
-import type { AccountPayload, CaptureStatus, Level, RuntimeLog, StatusPayload } from "./types";
+import type { AccountPayload, CaptureStatus, Level, PaymentPayload, RoomPayload, RuntimeLog, StatusPayload } from "./types";
 
 type Page = "dashboard" | "accounts" | "import" | "logs" | "settings" | "help";
 type ToastKind = "success" | "warning" | "error" | "info";
@@ -61,6 +62,7 @@ type UpdatePhase = "idle" | "checking" | "latest" | "available" | "downloading" 
 
 const RELEASES_URL = "https://github.com/linshiqiyyds/Weunix-JLevcDormroom/releases";
 const MIRROR_URL = "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom";
+const ONBOARDING_KEY = "weunix:onboarding:v2";
 
 type ConfirmState = {
   title: string;
@@ -77,8 +79,8 @@ const emptyStatus: StatusPayload = {
   time: "--",
   base: "服务端点已配置",
   open_time: "",
-  pref: "1,2",
-  pref_label: "布局 A + 布局 B",
+  pref: "1",
+  pref_label: "4人间",
   mask_sensitive: true,
   server_latency_ms: null,
   accounts: [],
@@ -86,10 +88,10 @@ const emptyStatus: StatusPayload = {
 };
 
 const prefOptions = [
-  { label: "布局 A + 布局 B", value: "1,2", hint: "优先按两个布局同时匹配" },
-  { label: "仅布局 A", value: "1", hint: "只匹配第一类布局" },
-  { label: "仅布局 B", value: "2", hint: "只匹配第二类布局" },
-  { label: "不限布局", value: "", hint: "由服务端返回顺序决定" },
+  { label: "4人间", value: "1", hint: "默认优先选择价格较高、人数更少的房型" },
+  { label: "8人间", value: "2", hint: "优先选择价格较低、人数更多的房型" },
+  { label: "4人间或8人间", value: "1,2", hint: "两种房型都可接受，按服务端返回顺序选择" },
+  { label: "不限房型", value: "", hint: "不做房型筛选，由服务端返回顺序决定" },
 ];
 
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
@@ -135,53 +137,70 @@ function AmbientScene() {
 }
 
 function Splash({ ready }: { ready: boolean }) {
+  const bootSteps = ["Core", "Identity", "Payment"];
+
   return (
     <AnimatePresence>
       {!ready && (
         <motion.div
-          className="hello-splash fixed inset-0 z-50 overflow-hidden bg-[#07080a]"
+          className="hello-splash fixed inset-0 z-50 overflow-hidden"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.018, filter: "blur(14px)" }}
-          transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+          exit={{ opacity: 0, scale: 1.012, filter: "blur(18px)" }}
+          transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="hello-aurora" />
+          <div className="hello-satin" />
+          <div className="hello-sweep" />
           <div className="hello-grid" />
-          <div className="relative flex h-full items-center justify-center">
-            <div className="hello-lockup">
+          <div className="hello-noise" />
+          <div className="relative flex h-full items-center justify-center px-7">
+            <motion.div
+              className="hello-stage"
+              initial={{ opacity: 0, y: 18, scale: 0.982 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            >
               <motion.div
                 className="hello-brand"
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.42, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
               >
-                Weunix:
+                <span>WeUnix:</span>
+                <em>作者 Kismetreasure</em>
               </motion.div>
               <motion.div
                 className="hello-word"
-                initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                initial={{ opacity: 0, y: 22, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.66, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.58, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
                 Hello
               </motion.div>
-              <motion.div
-                className="hello-line"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 168, opacity: 1 }}
-                transition={{ duration: 0.72, delay: 0.9, ease: [0.22, 1, 0.36, 1] }}
-              />
+              <div className="hello-progress" aria-hidden="true">
+                <motion.span
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: 0.82, delay: 0.44, ease: [0.22, 1, 0.36, 1] }}
+                />
+              </div>
               <motion.div
                 className="hello-status"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 1.05, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.42, delay: 0.58, ease: [0.22, 1, 0.36, 1] }}
               >
-                <span>loading workspace</span>
-                <i />
-                <i />
-                <i />
+                {bootSteps.map((item, index) => (
+                  <motion.span
+                    key={item}
+                    initial={{ opacity: 0.28 }}
+                    animate={{ opacity: [0.28, 1, 0.52] }}
+                    transition={{ duration: 0.88, delay: 0.66 + index * 0.1, repeat: Infinity, repeatDelay: 0.52 }}
+                  >
+                    {item}
+                  </motion.span>
+                ))}
               </motion.div>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
       )}
@@ -314,7 +333,7 @@ function StrategyPanel({
   const [hour, setHour] = useState(parsed.hour || "09");
   const [minute, setMinute] = useState(parsed.minute || "00");
   const [second, setSecond] = useState(parsed.second || "00");
-  const [pref, setPref] = useState(status.pref ?? "1,2");
+  const [pref, setPref] = useState(status.pref ?? "1");
   const [maskSensitive, setMaskSensitive] = useState(Boolean(status.mask_sensitive ?? true));
 
   useEffect(() => {
@@ -324,7 +343,7 @@ function StrategyPanel({
     setHour(next.hour || "09");
     setMinute(next.minute || "00");
     setSecond(next.second || "00");
-    setPref(status.pref ?? "1,2");
+    setPref(status.pref ?? "1");
     setMaskSensitive(Boolean(status.mask_sensitive ?? true));
   }, [status.open_time, status.pref, status.mask_sensitive]);
 
@@ -372,7 +391,7 @@ function StrategyPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="font-semibold text-white">执行策略</h3>
-          <p className="mt-1 text-xs text-white/38">开放时间、布局偏好和隐私显示会保存到本地配置，启动任务时自动使用。</p>
+          <p className="mt-1 text-xs text-white/38">开放时间、房型偏好和隐私显示会保存到本地配置，启动任务时自动使用。</p>
         </div>
         <button type="button" className={clsx("btn-secondary", maskSensitive && "privacy-on")} onClick={() => setMaskSensitive(!maskSensitive)}>
           {maskSensitive ? <LockKeyhole className="h-4 w-4" /> : <UnlockKeyhole className="h-4 w-4" />}
@@ -579,6 +598,18 @@ function AccountCard({
     mask(account.student_id || "编号待同步", maskSensitive),
     mask(account.openid, maskSensitive),
   ];
+  const payment = account.payment;
+  const payMeta = paymentMeta(payment);
+  const paymentFields = [
+    ["订单", paymentSafeValue(payment?.order_id, maskSensitive)],
+    ["状态", payment?.state_label || payMeta.label],
+    ["剩余", formatRestSeconds(payment?.rest_seconds)],
+    ["金额", formatMoney(payment?.pay_money || payment?.need_pay_money)],
+    ["房间", paymentSafeValue(payment?.room_no, maskSensitive)],
+    ["床位", paymentSafeValue(payment?.bed_no, maskSensitive)],
+    ["支付时间", payment?.pay_time || "待同步"],
+    ["记录", payment?.records_count != null ? `${payment.records_count} 条` : "待同步"],
+  ];
 
   async function copyDiagnostic() {
     try {
@@ -604,6 +635,53 @@ function AccountCard({
     try {
       await navigator.clipboard.writeText(text);
       toast("success", "摘要已复制", "已按当前隐私模式生成干净文本。");
+    } catch (error) {
+      toast("error", "复制失败", messageOf(error));
+    }
+  }
+
+  async function copyPayment() {
+    if (!payment?.order_id && !payment?.state_label) {
+      toast("warning", "暂无订单", "抢到资源或同步订单后再复制。");
+      return;
+    }
+    const text = [
+      `账号：${headlineName}`,
+      `订单：${paymentSafeValue(payment?.order_id, maskSensitive)}`,
+      `状态：${payment?.state_label || payMeta.label}`,
+      `金额：${formatMoney(payment?.pay_money || payment?.need_pay_money)}`,
+      `房间：${paymentSafeValue(payment?.room_no, maskSensitive)}`,
+      `床位：${paymentSafeValue(payment?.bed_no, maskSensitive)}`,
+      `支付时间：${payment?.pay_time || "待同步"}`,
+      `建议：${payMeta.hint}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("success", "订单摘要已复制", "已按当前隐私模式生成干净文本。");
+    } catch (error) {
+      toast("error", "复制失败", messageOf(error));
+    }
+  }
+
+  async function openPaymentLink() {
+    if (!payment?.pay_url) return;
+    try {
+      if (hasTauriRuntime()) {
+        await openUrl(payment.pay_url);
+      } else {
+        window.open(payment.pay_url, "_blank", "noopener,noreferrer");
+      }
+      toast("info", "已打开支付链接", "付款后程序会继续轮询订单状态。");
+    } catch (error) {
+      toast("error", "打开失败", messageOf(error));
+    }
+  }
+
+  async function copyPaymentLink() {
+    if (!payment?.pay_url) return;
+    try {
+      await navigator.clipboard.writeText(payment.pay_url);
+      toast("success", "支付链接已复制", "二维码无法识别时，可以把链接粘贴到浏览器或微信里打开。");
     } catch (error) {
       toast("error", "复制失败", messageOf(error));
     }
@@ -728,7 +806,7 @@ function AccountCard({
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-[1fr_260px] gap-3">
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-white/35">
             <span>资源快照</span>
@@ -738,8 +816,13 @@ function AccountCard({
             <div className="space-y-2">
               {rooms.slice(0, 4).map((room, index) => (
                 <div key={index} className="flex items-center justify-between rounded-xl bg-white/[.035] px-3 py-2 text-sm">
-                  <span className="truncate text-white/75">{room.room_type || room.roomType || "未知类型"}</span>
-                  <span className="ml-3 shrink-0 text-white/40">余量 {room.room_bed_num || room.bed_num || 0}</span>
+                  <div className="min-w-0">
+                    <div className="truncate text-white/75">{roomDisplayName(room)}</div>
+                    <div className="mt-0.5 text-[11px] text-white/35">{roomDisplayMoney(room)}</div>
+                  </div>
+                  <span className="ml-3 shrink-0 rounded-full border border-white/10 bg-white/[.035] px-2 py-1 text-xs text-white/45">
+                    余量 {roomRemaining(room)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -750,11 +833,58 @@ function AccountCard({
           )}
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <div className="text-xs text-white/35">运行结果</div>
-          <div className="mt-2 text-sm leading-6 text-white/64">
-            {account.payment?.pay_url ? "已返回确认链接，请尽快处理。" : account.payment?.message || (account.rehearsal ? `演练：资源 ${account.rehearsal.rooms_count || 0} 条，${account.rehearsal.matched ? "已匹配" : "未匹配"}` : account.status || "等待操作")}
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <div className="text-xs text-white/35">订单追踪</div>
+              <div className="mt-1 text-sm font-semibold text-white">{payment?.message || (account.rehearsal ? `演练：资源 ${account.rehearsal.rooms_count || 0} 条` : account.status || "等待操作")}</div>
+            </div>
+            <StatusChip level={payMeta.level}>{payMeta.label}</StatusChip>
           </div>
-          {account.payment?.pay_url && <div className="mt-2 break-all rounded-xl bg-white/[.035] p-2 font-mono text-[11px] text-white/45">{account.payment.pay_url}</div>}
+          <div className="grid grid-cols-2 gap-2">
+            {paymentFields.map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 bg-white/[.025] px-3 py-2">
+                <div className="text-[11px] text-white/32">{label}</div>
+                <div className="mt-1 truncate text-sm font-medium text-white/72">{value}</div>
+              </div>
+            ))}
+          </div>
+          {payment?.pay_url && payment.payment_state !== "paid" && payment.payment_state !== "expired" && (
+            <div className="mt-3 overflow-hidden rounded-2xl border border-amber-300/18 bg-[radial-gradient(circle_at_12%_0%,rgba(251,191,36,.16),transparent_34%),rgba(251,191,36,.055)] p-3 shadow-[0_18px_50px_rgba(251,191,36,.08)]">
+              <div className="flex items-start gap-3">
+                <div className="rounded-[22px] border border-white/15 bg-white p-2 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
+                  <QRCodeSVG value={payment.pay_url} size={148} level="M" bgColor="#ffffff" fgColor="#050505" includeMargin={false} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-amber-50">
+                    <QrCode className="h-4 w-4 text-amber-200" />
+                    订单已锁定，扫码完成支付
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-amber-100/72">
+                    {payment.rest_seconds != null ? `支付窗口剩余 ${formatRestSeconds(payment.rest_seconds)}。` : "支付链接已就绪。"}
+                    用微信扫描左侧二维码，支付后程序会自动轮询订单状态。
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn-ghost" onClick={openPaymentLink}>
+                      <ExternalLink className="h-4 w-4" /> 打开链接
+                    </button>
+                    <button type="button" className="btn-ghost" onClick={copyPaymentLink}>
+                      <Copy className="h-4 w-4" /> 复制链接
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {payment?.payment_state === "paid" && (
+            <div className="mt-3 rounded-xl border border-emerald-300/15 bg-emerald-300/[.07] px-3 py-2 text-xs leading-5 text-emerald-100/80">
+              已确认支付成功。房间和床位以订单记录为准；隐私模式开启时会自动打码。
+            </div>
+          )}
+          <div className="mt-3 flex justify-end">
+            <button type="button" className="btn-ghost" onClick={copyPayment}>
+              <Copy className="h-4 w-4" /> 复制订单
+            </button>
+          </div>
         </div>
       </div>
 
@@ -792,7 +922,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
   const [nickname, setNickname] = useState("");
   const [tag, setTag] = useState("");
   const [busy, setBusy] = useState("");
-  const [message, setMessage] = useState("粘贴 o... 开头的 opid，或包含 wxopid=o... 的登录请求链接。");
+  const [message, setMessage] = useState("粘贴 o... 开头的登录标识，或粘贴完整登录请求。");
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const handledCaptureRef = useRef("");
   const completedCaptureRef = useRef("");
@@ -813,15 +943,15 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
         if (latest.imported && completedCaptureRef.current !== capturedRaw) {
           completedCaptureRef.current = capturedRaw || latest.captured_openid || String(Date.now());
           setMessage("自动取号成功，账号已导入。");
-          toast("success", "自动取号成功", "已捕获 wxopid 并导入账号。");
+          toast("success", "自动取号成功", "已捕获登录标识并导入账号。");
           onImported();
         } else if (latest.error && capturedRaw) {
           setMessage(`已捕获 ${latest.captured_openid}，自动添加失败：${latest.error}。可点击添加账号重试。`);
-          toast("warning", "已捕获 opid", "自动添加失败，已填入输入框，可手动添加或重试。");
+          toast("warning", "已捕获登录标识", "自动添加失败，已填入输入框，可手动添加或重试。");
         } else if (capturedRaw) {
           setMessage(`已捕获 ${latest.captured_openid}，正在验证并导入...`);
         } else if (latest.last_url) {
-          setMessage("已检测到登录接口请求，等待 wxopid 参数...");
+          setMessage("已检测到登录请求，正在等待可用的登录标识...");
         } else if (latest.last_target_url) {
           setMessage("已看到目标服务请求，但还没有看到登录接口。请在 PC 客户端进入目标功能页面。");
         } else if (latest.system_proxy_active) {
@@ -837,20 +967,20 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
   }, [capture?.active, onImported, toast]);
 
   function explainQrLimit() {
-    toast("warning", "扫码链接不能直接当作长期凭据", "扫码后的 code 通常是一次性的；登录请求里的 wxopid 才是当前程序需要保存的长期凭据。");
+    toast("warning", "扫码链接不能直接当作长期凭据", "扫码后的临时 code 通常只能使用一次；程序需要保存的是长期登录标识。");
   }
 
   async function pasteFromClipboard() {
     try {
       const text = await navigator.clipboard.readText();
       if (!text.trim()) {
-        toast("warning", "剪贴板为空", "请先复制包含 wxopid= 的请求 URL 或 cURL。");
+        toast("warning", "剪贴板为空", "请先复制完整登录请求，或复制 o... 开头的登录标识。");
         return;
       }
       setRaw(text);
       const openid = extractOpenid(text);
-      setMessage(openid ? "已从剪贴板识别到 opid，可以添加账号。" : "已粘贴，请检查是否包含 wxopid=o...。");
-      toast(openid ? "success" : "info", openid ? "已识别 opid" : "已粘贴内容", openid ? mask(openid, true) : "没有看到 wxopid=，可复制完整请求 URL。");
+      setMessage(openid ? "已从剪贴板识别到登录标识，可以添加账号。" : "已粘贴，请检查是否包含 o... 开头的登录标识。");
+      toast(openid ? "success" : "info", openid ? "已识别登录标识" : "已粘贴内容", openid ? mask(openid, true) : "没有看到可用登录标识，可复制完整登录请求。");
     } catch {
       toast("warning", "无法读取剪贴板", "请手动粘贴请求 URL 或 cURL。");
     }
@@ -866,7 +996,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
       setCapture(status);
       if (mode === "system") {
         setMessage("一键自动抓取已启动：请打开 PC 客户端并进入目标功能页面。");
-        toast("success", "自动抓取已启动", "WeUnix 会临时接管系统代理，抓到 wxopid 后自动恢复。");
+        toast("success", "自动抓取已启动", "WeUnix 会临时接管系统代理，抓到登录标识后自动恢复。");
       } else {
         setMessage(`独立监听已启动：127.0.0.1:${status.port}。它不会自动捕获 PC 客户端流量。`);
         toast("info", "独立监听已启动", "此模式不修改系统代理，只适合手动把浏览器或工具代理到该端口。");
@@ -903,17 +1033,17 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
       const code = extractValue(raw, "wxcode") || extractValue(raw, "code");
       let openid = extractOpenid(raw);
       if (looksLikeAppId(raw)) {
-        throw new Error("这是 wx... appid，不是 opid。请复制带 wxopid=o... 的登录请求。");
+        throw new Error("这是应用标识，不是账号登录标识。请复制完整登录请求，或复制 o... 开头的登录标识。");
       }
       if (!openid && code) {
-        setMessage("识别到一次性 code，正在尝试换取 opid...");
+        setMessage("识别到一次性 code，正在尝试换取登录标识...");
         const resolved = await api.resolveWxcode(code);
         openid = resolved.openid;
       }
       if (!openid && isWechatAuthorizeEntry(raw)) {
-        throw new Error("这是授权入口，不是可保存的 opid。请进入目标功能页面后复制登录请求。");
+        throw new Error("这是授权入口，不是可保存的登录标识。请进入目标功能页面后复制登录请求。");
       }
-      if (!openid) throw new Error("没有识别到可用 opid。请粘贴 o... 开头的 opid，或包含 wxopid=o... 的登录请求链接。");
+      if (!openid) throw new Error("没有识别到可用登录标识。请粘贴 o... 开头的登录标识，或粘贴完整登录请求。");
       await api.addAccount({ openid, nickname, tag });
       setMessage("账号已导入。");
       setRaw("");
@@ -939,7 +1069,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-semibold text-white">自动获取 opid</h2>
+              <h2 className="text-2xl font-semibold text-white">自动获取登录标识</h2>
               <StatusChip level={capture?.active ? "success" : credentialState.level}>{capture?.active ? "监听中" : credentialState.title}</StatusChip>
             </div>
             <p className="mt-1 text-sm text-white/45">小白用户点一键自动抓取；高级模式才使用独立监听或手动粘贴。</p>
@@ -951,7 +1081,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
             <div>
               <div className="text-base font-semibold text-white">取号助手</div>
               <p className="mt-2 text-sm leading-6 text-white/50">
-                一键自动抓取会短暂接管系统代理，让 PC 客户端请求经过 WeUnix；抓到 wxopid 后会自动恢复。独立监听不会改系统代理，也不会自动抓到 PC 客户端流量。
+                一键自动抓取会短暂接管系统代理，让 PC 客户端请求经过 WeUnix；抓到登录标识后会自动恢复。独立监听不会改系统代理，也不会自动抓到 PC 客户端流量。
               </p>
               <div className="mt-3 font-mono text-xs text-white/38">
                 {capture?.active
@@ -999,7 +1129,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
           )}
           {capture?.active && capture.system_proxy_active && !capture.captured_openid && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white/55">
-              {capture.last_url ? "已看到登录接口请求，正在等待 wxopid 参数。" : capture.last_target_url ? "已看到目标服务请求，但还没有进入带 wxopid 的登录接口。" : "正在等待 PC 客户端流量。请进入目标功能页面。"}
+              {capture.last_url ? "已看到登录请求，正在等待可用登录标识。" : capture.last_target_url ? "已看到目标服务请求，但还没有进入登录验证步骤。" : "正在等待 PC 客户端流量。请进入目标功能页面。"}
             </div>
           )}
           {capture?.error && <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-300/10 p-3 text-sm text-rose-100">{capture.error}</div>}
@@ -1020,7 +1150,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
         </div>
 
         <div className="mb-2 text-sm font-semibold text-white/70">备用：手动粘贴请求</div>
-        <textarea className="input-area h-40" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="高级模式：粘贴请求 URL / cURL，例如 LoginByopenid?wxopid=oZMR...。不要粘贴 wx... appid。" />
+        <textarea className="input-area h-40" value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="高级模式：粘贴完整登录请求 URL / cURL，或粘贴 o... 开头的登录标识。不要粘贴 wx... 开头的应用标识。" />
         <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -1050,7 +1180,7 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-white">为什么需要取号助手？</h3>
-            <p className="mt-1 text-sm leading-6 text-white/42">授权 code 通常只能用一次，wx... 是应用标识。真正能长期登录的是登录接口请求里的 wxopid=o...。</p>
+            <p className="mt-1 text-sm leading-6 text-white/42">扫码后的临时 code 通常只能使用一次，wx... 开头的是应用标识。真正要保存的是 o... 开头的登录标识。</p>
           </div>
           <button type="button" className="btn-secondary" onClick={explainQrLimit}>
             <AlertTriangle className="h-4 w-4" />
@@ -1061,8 +1191,8 @@ function ImportWizard({ onImported, toast }: { onImported: () => void; toast: (k
           {[
             ["一键抓取", "适合小白用户：临时接管系统代理，自动捕获 PC 客户端里的登录请求，成功后自动恢复。"],
             ["独立监听", "适合高级用户：只开本地代理端口，不改系统代理，需要手动把浏览器或工具代理到该端口。"],
-            ["命中目标", "带 wxopid=o... 参数的登录接口请求。"],
-            ["备用方案", "如果自动捕获不到，再使用抓包工具复制带 wxopid= 的 URL 或 cURL 粘贴导入。"],
+            ["命中目标", "能识别出 o... 开头登录标识的登录请求。"],
+            ["备用方案", "如果自动捕获不到，再使用抓包工具复制完整登录请求或 o... 开头的登录标识粘贴导入。"],
           ].map(([title, detail]) => (
             <div key={title} className="rounded-2xl border border-white/10 bg-white/[.035] p-4">
               <div className="text-sm font-semibold text-white">{title}</div>
@@ -1294,48 +1424,186 @@ function UpdateCenter({ toast }: { toast: (kind: ToastKind, title: string, detai
   );
 }
 
-function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
-  const sections = [
+function OnboardingGuide({
+  open,
+  onClose,
+  onStartImport,
+  onOpenHelp,
+}: {
+  open: boolean;
+  onClose: (neverAgain?: boolean) => void;
+  onStartImport: () => void;
+  onOpenHelp: () => void;
+}) {
+  const [neverAgain, setNeverAgain] = useState(false);
+  const steps = [
+    { title: "先看顶部状态", detail: "显示 Live 就能继续；如果是 Backend offline，先关闭软件重新打开。", icon: ShieldCheck },
+    { title: "导入账号", detail: "点左侧“导入”，小白优先点“一键自动抓取”，成功后会自动添加账号。", icon: QrCode },
+    { title: "同步身份", detail: "回到“账号”页点“同步”，看到姓名、编号、分组后再继续。", icon: RefreshCcw },
+    { title: "先体检再演练", detail: "体检和演练不会下单，用来确认登录、批次、资源接口都正常。", icon: ClipboardCheck },
+    { title: "设置偏好和时间", detail: "默认优先 4 人间；时间用下拉选择，别手写格式。", icon: CalendarDays },
+    { title: "启动后等结果", detail: "拿到第一笔真实订单会停止继续请求；出现二维码后用微信扫码支付。", icon: Play },
+  ];
+
+  function close() {
+    onClose(neverAgain);
+  }
+
+  function startImport() {
+    onClose(neverAgain);
+    onStartImport();
+  }
+
+  function openHelp() {
+    onClose(neverAgain);
+    onOpenHelp();
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="modal-backdrop onboarding-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div className="onboarding-panel" initial={{ opacity: 0, y: 20, scale: 0.965 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.985 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+            <div className="onboarding-head">
+              <div>
+                <div className="manual-kicker">
+                  <BookOpen className="h-3.5 w-3.5 text-acid" />
+                  新手必读
+                </div>
+                <h2>第一次用 WeUnix，请照这个顺序点</h2>
+                <p>不要一打开就点启动。先确认账号是谁、状态是不是正常、体检有没有通过。下面每一步都能在左侧导航或账号卡片里找到对应按钮。</p>
+              </div>
+              <button type="button" className="window-btn" aria-label="关闭使用说明" onClick={close}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="onboarding-scroll">
+              <div className="onboarding-flow">
+                {steps.map((step, index) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.title} className="onboarding-step">
+                      <div className="onboarding-step-no">{String(index + 1).padStart(2, "0")}</div>
+                      <div className="onboarding-step-icon">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="onboarding-step-title">{step.title}</div>
+                        <div className="onboarding-step-detail">{step.detail}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="onboarding-note">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                <div>
+                  <div className="font-semibold text-white">卡住时先别乱点</div>
+                  <p>如果自动抓取后网页打不开，回到“导入”页点“停止并恢复”。如果体检失败，先看账号卡片和日志，不要重复启动任务。</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="onboarding-actions">
+              <label className="onboarding-checkbox">
+                <input type="checkbox" checked={neverAgain} onChange={(event) => setNeverAgain(event.target.checked)} />
+                <span>下次启动不再自动弹出</span>
+              </label>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className="btn-secondary" onClick={openHelp}>
+                  <BookOpen className="h-4 w-4" />
+                  看完整说明
+                </button>
+                <button type="button" className="btn-primary" onClick={startImport}>
+                  <QrCode className="h-4 w-4" />
+                  开始导入
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function HelpPage({ setPage, openGuide }: { setPage: (page: Page) => void; openGuide: () => void }) {
+  const beginnerSteps = [
     {
-      title: "快速开始",
-      icon: Play,
-      items: ["进入导入页，优先点击一键自动抓取。", "成功添加账号后，先同步，再体检，再演练。", "确认状态都正常后，再启动单个账号或全部账号。"],
-    },
-    {
-      title: "API 直连",
-      icon: Radar,
-      items: ["本地后端直连关键 API，减少页面加载、白屏等待和重复跳转。", "实测关键流程体感卡顿可降低约 82%，实际效果受网络和服务状态影响。", "所有账号、偏好和隐私设置仍保存在本机。"],
-    },
-    {
-      title: "账号管理",
-      icon: UserRound,
-      items: ["账号卡片可以编辑备注和标签，适合多人使用。", "删除账号会弹出二次确认；运行中的账号会先停止再移除。", "复制摘要会按当前隐私模式生成干净文本。"],
-    },
-    {
-      title: "隐私显示",
+      title: "第 0 步：确认程序已经正常启动",
       icon: ShieldCheck,
-      items: ["默认开启隐私模式，姓名、编号、openid 等字段会打码。", "需要核对时，点击账号卡片里的临时核对或策略区的隐私按钮。", "分发给他人前，建议保持隐私模式开启。"],
+      action: ["看窗口顶部 WeUnix 旁边的状态。", "显示 Live：后端连接正常，可以继续。", "显示 Backend offline：先关闭软件，再重新打开。"],
+      normal: "Live、当前时间、短句都能正常显示。",
+      stuck: "如果重开仍离线，先不要点启动，去“日志”页截图或复制诊断。"
     },
     {
-      title: "时间策略",
+      title: "第 1 步：导入第一个账号",
+      icon: QrCode,
+      action: ["点左侧“导入”。", "小白用户只点“一键自动抓取”，不要点“仅启动监听”。", "打开 PC 客户端，进入目标功能页面，看到“自动取号成功，账号已导入”再继续。"],
+      normal: "页面会提示已捕获并导入，随后回到控制台或账号页能看到账号卡片。",
+      stuck: "如果网页打不开或网络异常，立刻点“停止并恢复”。如果只看到扫码 code，不要当作长期账号使用。"
+    },
+    {
+      title: "第 2 步：给账号写备注，避免认错人",
+      icon: UserRound,
+      action: ["导入前可以填备注名，例如“本人”“张三”“备用”。", "标签可以写“主号”“备用”“4人间优先”。", "多人使用时，必须先确认账号卡片上的身份资料。"],
+      normal: "账号卡片能让你分辨这是谁，不需要靠一串看不懂的字符。",
+      stuck: "如果导入错了，去“账号”页删除；删除会二次确认，避免误删。"
+    },
+    {
+      title: "第 3 步：同步学生资料",
+      icon: RefreshCcw,
+      action: ["点左侧“账号”。", "在对应账号卡片里点“同步”。", "等按钮转完，查看身份资料区域是否出现姓名、编号、分组等信息。"],
+      normal: "身份资料显示“已同步”，并且你能确认这个账号属于谁。",
+      stuck: "如果一直待同步，先点“体检”看自动登录和 Token 是否通过。"
+    },
+    {
+      title: "第 4 步：先体检，再演练",
+      icon: ClipboardCheck,
+      action: ["在账号卡片点“体检”。", "体检通过后再点“演练”。", "演练只读取资源，不会创建真实订单。"],
+      normal: "体检会显示自动登录、Token、资料同步、批次、资源数量等结果。",
+      stuck: "资源数量为 0 不一定是坏了，可能是接口正常但当前没有开放资源。"
+    },
+    {
+      title: "第 5 步：设置房型和启动时间",
       icon: CalendarDays,
-      items: ["立即、今天、明天、自定义四种模式，不需要手写时间。", "时间使用小时、分钟、秒下拉选择，避免格式输错。", "保存策略后，启动任务时会按保存值执行。"],
+      action: ["点左侧“设置”。", "房型默认优先 4 人间；需要 8 人间再手动改。", "启动时间用“立即 / 今天 / 明天 / 自定义”和下拉框选择，不要手写。"],
+      normal: "策略卡片会显示当前偏好和启动时间。",
+      stuck: "不知道开放时间时，不要瞎填很早的时间；可以临近开放时选“立即”手动启动。"
     },
     {
-      title: "异常处理",
-      icon: AlertTriangle,
-      items: ["按钮点击后会显示 loading，避免重复提交。", "失败会显示 toast 和日志，不需要看控制台。", "网络异常时先停止取号组件，确认系统代理已恢复。"],
+      title: "第 6 步：启动任务后不要重复点",
+      icon: Play,
+      action: ["确认账号、体检、演练都没问题后，再点“启动”。", "启动后看账号卡片、日志和订单区域。", "请求到第一笔真实订单后，程序会停止继续抢单请求，只保留支付追踪。"],
+      normal: "按钮会有 loading，日志会持续刷新，订单区会展示结果。",
+      stuck: "如果失败，先看 toast 和日志；不要连续狂点启动，以免重复触发。"
     },
     {
-      title: "诊断给维护者",
-      icon: FileText,
-      items: ["账号卡片底部有复制诊断，适合排查接口和账号状态。", "不要直接公开完整 openid 或 UserId。", "遇到问题先复制诊断，再描述你点击了哪一步。"],
+      title: "第 7 步：出现二维码后完成支付",
+      icon: QrCode,
+      action: ["看到支付二维码后，用微信扫码。", "不要把二维码、支付链接、完整身份标识发给别人。", "支付后等待程序自动刷新订单状态。"],
+      normal: "支付成功后，订单区域会显示已支付或新的支付记录。",
+      stuck: "如果支付后程序没立刻刷新，可以稍等几秒再点同步；最终状态以官方页面记录为准。"
     },
-    {
-      title: "软件更新",
-      icon: Download,
-      items: ["设置页可以检查更新、下载、安装并重启生效。", "GitHub 主源不可达时会继续尝试 Gitee 镜像。", "安装包会经过签名校验，失败时可打开发布页手动下载。"],
-    },
+  ];
+
+  const quickRules = [
+    ["能点什么", "新手只需要：导入 -> 同步 -> 体检 -> 演练 -> 设置 -> 启动。"],
+    ["不要点什么", "看不懂“仅启动监听”就不要点；它是给会配置代理的人用的。"],
+    ["隐私怎么处理", "默认打码。只有本人核对时才临时显示完整信息，发截图前切回隐私模式。"],
+    ["失败怎么反馈", "复制诊断时只发干净文本，不要发完整登录标识、支付二维码或支付链接。"],
+    ["更新怎么做", "设置页点检查更新。GitHub 不通时会尝试 Gitee，失败再手动下载新版。"],
+  ];
+
+  const stuckCases = [
+    ["点了没反应", "看按钮是不是在转圈；等待 5-10 秒。如果 toast 报错，打开日志页看最后一条。"],
+    ["抓取不到账号", "确认点的是“一键自动抓取”；确认 PC 客户端已经登录；进入目标功能页面后多等待几秒。"],
+    ["网络变差", "回到导入页点“停止并恢复”。这会把系统代理恢复到启动前状态。"],
+    ["身份不完整", "先点同步；同步失败再点体检；体检结果会告诉你是自动登录、Token 还是资料同步的问题。"],
+    ["资源为 0", "这通常表示接口能通，但当前没有可选资源；继续关注批次时间和日志。"],
+    ["支付没刷新", "不要重复下单。先等轮询刷新，再点同步核对支付记录。"],
   ];
 
   return (
@@ -1346,10 +1614,13 @@ function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.04] px-3 py-1 text-xs text-white/45">
               <BookOpen className="h-3.5 w-3.5 text-acid" /> in-app manual
             </div>
-            <h2 className="text-3xl font-semibold text-white">使用说明</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/48">这份说明放在程序里，给不懂抓包、不懂配置文件的用户也能按步骤使用。WeUnix 通过本地后端直连关键 API，减少小程序白屏等待；每个关键动作都有反馈，每个危险动作都有确认。</p>
+            <h2 className="text-3xl font-semibold text-white">小白使用说明书</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/52">默认你完全不懂代理、不懂抓包、不懂配置文件。只要按下面顺序点，先确认账号和体检结果，再启动任务；任何失败都先看页面反馈和日志，不需要打开控制台。</p>
           </div>
           <div className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={openGuide}>
+              <BookOpen className="h-4 w-4" /> 启动向导
+            </button>
             <button type="button" className="btn-secondary" onClick={() => setPage("import")}>
               <QrCode className="h-4 w-4" /> 去导入
             </button>
@@ -1359,28 +1630,128 @@ function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
           </div>
         </div>
       </div>
+
+      <div className="manual-layout">
+        <div className="manual-flow">
+          {beginnerSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <div key={step.title} className="manual-step">
+                <div className="manual-step-head">
+                  <div className="manual-step-index">{String(index).padStart(2, "0")}</div>
+                  <div className="manual-step-icon">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3>{step.title}</h3>
+                    <p>{step.normal}</p>
+                  </div>
+                </div>
+                <div className="manual-step-grid">
+                  <div>
+                    <div className="manual-label">你要点哪里</div>
+                    <div className="space-y-2">
+                      {step.action.map((item) => (
+                        <div key={item} className="manual-line">
+                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-acid" />
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="manual-trouble">
+                    <div className="manual-label">如果卡住</div>
+                    <p>{step.stuck}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <aside className="manual-aside">
+          <div className="manual-panel">
+            <div className="manual-kicker">
+              <ShieldCheck className="h-3.5 w-3.5 text-acid" />
+              新手规则
+            </div>
+            <div className="mt-4 space-y-3">
+              {quickRules.map(([title, detail]) => (
+                <div key={title} className="manual-rule">
+                  <div>{title}</div>
+                  <p>{detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="manual-panel">
+            <div className="manual-kicker">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-200" />
+              常见卡住点
+            </div>
+            <div className="mt-4 space-y-3">
+              {stuckCases.map(([title, detail]) => (
+                <div key={title} className="manual-rule">
+                  <div>{title}</div>
+                  <p>{detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="manual-panel manual-warning">
+            <div className="flex gap-3">
+              <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-amber-200" />
+              <div>
+                <h3>不要公开敏感信息</h3>
+                <p>发截图、发诊断、找人帮忙前，先确认隐私模式开启。不要公开完整账号标识、支付二维码、支付链接和订单关键字段。</p>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
       <div className="grid grid-cols-3 gap-4">
-        {sections.map((section) => {
+        {[
+          { title: "API 直连", icon: Radar, detail: "本地后端直连关键流程，减少页面白屏和重复跳转；实测可显著降低卡顿，但最终效果仍受网络和服务状态影响。" },
+          { title: "订单安全", icon: QrCode, detail: "请求到第一笔真实订单后立即停止继续抢单请求，只进入支付追踪，避免重复提交。" },
+          { title: "软件更新", icon: Download, detail: "设置页可检查更新；GitHub 不通时尝试 Gitee 镜像，仍失败时再手动下载。" },
+        ].map((section) => {
           const Icon = section.icon;
           return (
-            <div key={section.title} className="help-card">
+            <div key={section.title} className="help-card compact-help-card">
               <div className="mb-4 flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-2xl border border-acid/20 bg-acid/10 text-acid">
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-semibold text-white">{section.title}</h3>
               </div>
-              <div className="space-y-2">
-                {section.items.map((item) => (
-                  <div key={item} className="flex gap-2 text-sm leading-6 text-white/52">
-                    <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-acid" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm leading-6 text-white/52">{section.detail}</p>
             </div>
           );
         })}
+      </div>
+
+      <div className="console-card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">如果你只想照着点</h3>
+            <p className="mt-1 text-sm text-white/45">最短路径就是这 6 个按钮，不懂原理也可以完成。</p>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => setPage("import")}>
+            <QrCode className="h-4 w-4" />
+            从导入开始
+          </button>
+        </div>
+        <div className="mt-5 grid grid-cols-6 gap-2">
+          {["导入", "同步", "体检", "演练", "设置", "启动"].map((item, index) => (
+            <div key={item} className="manual-pill">
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              {item}
+            </div>
+          ))}
+        </div>
       </div>
     </motion.section>
   );
@@ -1395,6 +1766,7 @@ export default function App() {
   const [emo, setEmo] = useState("正在加载今日短句...");
   const [toasts, setToasts] = useState<{ id: number; kind: ToastKind; title: string; detail?: string }[]>([]);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   function toast(kind: ToastKind, title: string, detail?: string) {
     const id = Date.now() + Math.random();
@@ -1428,7 +1800,7 @@ export default function App() {
   async function updatePrivacy(next: boolean) {
     setBusy("privacy");
     try {
-      await api.saveConfig({ open_time: status.open_time || "", pref: status.pref ?? "1,2", mask_sensitive: next });
+      await api.saveConfig({ open_time: status.open_time || "", pref: status.pref ?? "1", mask_sensitive: next });
       toast("success", next ? "隐私模式已开启" : "已显示完整信息", next ? "敏感字段会重新打码。" : "核对完成后建议切回隐私模式。");
       await reload();
     } catch (err) {
@@ -1438,8 +1810,27 @@ export default function App() {
     }
   }
 
+  function closeGuide(neverAgain = false) {
+    if (neverAgain) {
+      try {
+        window.localStorage.setItem(ONBOARDING_KEY, "off");
+      } catch {
+        // Local storage can be unavailable in a hardened webview; closing still works.
+      }
+    }
+    setShowGuide(false);
+  }
+
   useEffect(() => {
-    const timer = window.setTimeout(() => setReady(true), 1100);
+    const timer = window.setTimeout(() => setReady(true), 1600);
+    const guideTimer = window.setTimeout(() => {
+      try {
+        if (window.localStorage.getItem(ONBOARDING_KEY) === "off") return;
+      } catch {
+        // Fall through and show the guide when storage is blocked.
+      }
+      setShowGuide(true);
+    }, 2350);
     reload();
     api.emo()
       .then((value) => setEmo(value.text))
@@ -1447,6 +1838,7 @@ export default function App() {
     const polling = window.setInterval(reload, 1500);
     return () => {
       window.clearTimeout(timer);
+      window.clearTimeout(guideTimer);
       window.clearInterval(polling);
     };
   }, []);
@@ -1461,6 +1853,7 @@ export default function App() {
       <AmbientScene />
       <Toasts toasts={toasts} dismiss={(id) => setToasts((items) => items.filter((item) => item.id !== id))} />
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
+      <OnboardingGuide open={showGuide} onClose={closeGuide} onStartImport={() => setPage("import")} onOpenHelp={() => setPage("help")} />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(125,211,252,.08),transparent_30%),radial-gradient(circle_at_75%_0%,rgba(223,255,79,.08),transparent_30%),linear-gradient(135deg,rgba(255,255,255,.03),transparent_30%)]" />
 
       <div className="relative grid h-screen grid-cols-[104px_1fr]">
@@ -1486,7 +1879,7 @@ export default function App() {
             <div className="min-w-0" data-tauri-drag-region>
               <div className="flex items-center gap-3" data-tauri-drag-region>
                 <h1 className="text-2xl font-semibold" data-tauri-drag-region>
-                  WeUnix <span className="align-middle text-xs font-semibold text-acid">Kismet7</span>
+                  WeUnix <span className="align-middle text-xs font-semibold text-acid">作者 Kismetreasure</span>
                 </h1>
                 <StatusChip level={error ? "error" : "success"}>{error ? "Backend offline" : "Live"}</StatusChip>
                 <StatusChip level={maskSensitive ? "info" : "warning"}>{maskSensitive ? "隐私模式" : "完整显示"}</StatusChip>
@@ -1634,7 +2027,7 @@ export default function App() {
                 </motion.section>
               )}
 
-              {page === "help" && <HelpPage key="help" setPage={setPage} />}
+              {page === "help" && <HelpPage key="help" setPage={setPage} openGuide={() => setShowGuide(true)} />}
             </AnimatePresence>
           </div>
         </main>
@@ -1709,13 +2102,84 @@ function maskSyncedValue(value: string, enabled: boolean, fallback = "待同步"
 }
 
 function prefLabelFor(pref: string) {
-  return prefOptions.find((item) => item.value === (pref ?? ""))?.label || "不限布局";
+  return prefOptions.find((item) => item.value === (pref ?? ""))?.label || "不限房型";
 }
 
 function formatBooleanState(value: unknown) {
   if (value === true) return "通过";
   if (value === false) return "未通过";
   return "待检查";
+}
+
+function paymentMeta(payment?: PaymentPayload): { label: string; level: Level | "idle"; hint: string } {
+  const state = payment?.payment_state;
+  if (state === "paid") return { label: "支付成功", level: "success", hint: "业务记录已确认付款" };
+  if (state === "expired") return { label: "订单过期", level: "error", hint: "有效期内未完成支付" };
+  if (state === "pending") return { label: "待支付", level: "warning", hint: "请在有效期内完成付款" };
+  if (state === "unknown") return { label: "状态未知", level: "warning", hint: "已拿到订单记录但状态无法识别" };
+  return { label: "等待订单", level: "idle", hint: "抢到资源后会自动追踪支付状态" };
+}
+
+function formatRestSeconds(value?: number | null) {
+  if (value == null || Number.isNaN(Number(value))) return "待同步";
+  const total = Math.max(0, Number(value));
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.floor(total % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatMoney(value?: string | number) {
+  if (value == null || value === "") return "待同步";
+  const number = Number(value);
+  if (Number.isNaN(number)) return String(value);
+  return `¥${number.toFixed(2)}`;
+}
+
+function roomRawText(room?: RoomPayload) {
+  return String(room?.room_type || room?.roomType || room?.room_type_name || room?.title || room?.name || "");
+}
+
+function roomDisplayName(room?: RoomPayload) {
+  const raw = roomRawText(room);
+  if (raw.includes("4人") || raw.includes("四人")) return "4人间";
+  if (raw.includes("8人") || raw.includes("八人")) return "8人间";
+  return raw || "未知类型";
+}
+
+function roomRemaining(room?: RoomPayload) {
+  const direct =
+    room?.room_bed_num ??
+    room?.room_bed_count ??
+    room?.bed_num ??
+    room?.bedNum ??
+    room?.remain ??
+    room?.surplus ??
+    room?.left_count ??
+    room?.available_count ??
+    room?.count;
+  if (direct != null && direct !== "") return String(direct);
+  const match = roomRawText(room).match(/(?:剩余|余)\s*(\d+)\s*(?:间|个|套|床)?/);
+  return match?.[1] || "待同步";
+}
+
+function roomDisplayMoney(room?: RoomPayload) {
+  const direct = room?.room_charge ?? room?.charge ?? room?.price ?? room?.amount ?? room?.money ?? room?.need_pay_money;
+  if (direct != null && direct !== "") return formatMoney(normalizeMoneyText(direct));
+  const match = roomRawText(room).match(/[¥￥]\s*([0-9]+(?:\.[0-9]+)?)/) || roomRawText(room).match(/([0-9]+(?:\.[0-9]+)?)\s*元/);
+  if (match?.[1]) return formatMoney(match[1]);
+  return "金额待同步";
+}
+
+function normalizeMoneyText(value: string | number) {
+  if (typeof value === "number") return value;
+  const text = String(value).trim();
+  const match = text.match(/[¥￥]\s*([0-9]+(?:\.[0-9]+)?)/) || text.match(/([0-9]+(?:\.[0-9]+)?)\s*元/);
+  return match?.[1] || text;
+}
+
+function paymentSafeValue(value: string | number | undefined | null, maskSensitive: boolean, fallback = "待同步") {
+  if (value == null || value === "") return fallback;
+  return maskSensitive ? "已确认" : String(value);
 }
 
 function todayDateString() {
@@ -1789,23 +2253,23 @@ function looksLikeAppId(raw: string) {
 function describeCredentialInput(raw: string, openid: string): { level: Level | "idle"; title: string; detail: string } {
   const text = raw.trim();
   if (!text) {
-    return { level: "idle", title: "等待粘贴", detail: "请粘贴带 wxopid= 的登录请求 URL 或 cURL。" };
+    return { level: "idle", title: "等待粘贴", detail: "请粘贴完整登录请求，或粘贴 o... 开头的登录标识。" };
   }
   if (openid) {
     const fromLoginEndpoint = /wxopid=/i.test(text) && /(IsAutoLogin|LoginByopenid)/i.test(text);
     return {
       level: "success",
-      title: "已识别 opid",
-      detail: fromLoginEndpoint ? "这是登录接口请求里的 wxopid，可以导入。" : "已识别到 o... 开头的 opid，提交后会自动验证。",
+      title: "已识别登录标识",
+      detail: fromLoginEndpoint ? "这是可用的登录请求，可以导入。" : "已识别到 o... 开头的登录标识，提交后会自动验证。",
     };
   }
   if (looksLikeAppId(text)) {
-    return { level: "error", title: "这是 appid", detail: "wx... 不是身份 opid，请复制登录接口请求。" };
+    return { level: "error", title: "这是应用标识", detail: "wx... 不是账号登录标识，请复制完整登录请求。" };
   }
   if (isWechatAuthorizeEntry(text) || extractValue(text, "code") || extractValue(text, "wxcode")) {
-    return { level: "warning", title: "一次性 code", detail: "code 可能只能换一次，推荐直接捕获带 wxopid 的登录请求。" };
+    return { level: "warning", title: "一次性 code", detail: "code 可能只能换一次，推荐直接捕获完整登录请求。" };
   }
-  return { level: "warning", title: "未识别", detail: "没有看到 wxopid=o...，请复制完整登录请求。" };
+  return { level: "warning", title: "未识别", detail: "没有看到 o... 开头的登录标识，请复制完整登录请求。" };
 }
 
 function messageOf(error: unknown) {

@@ -29,7 +29,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
+    "targets": ["nsis", "msi"],
     "createUpdaterArtifacts": true,
     "icon": ["../../../app_icon.ico"],
     "resources": [
@@ -42,14 +42,27 @@
       "resources/secret_store.py"
     ],
     "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
       "wix": {
         "language": "zh-CN"
+      },
+      "nsis": {
+        "installerIcon": "../../../app_icon.ico",
+        "uninstallerIcon": "../../../app_icon.ico",
+        "installMode": "currentUser",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false,
+        "compression": "lzma",
+        "startMenuFolder": "WeUnix"
       }
     }
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDQzIyQjRENjRDNEZENTEKUldSUi9jUmtUU3ZDYkJxUldMNjl5UG1CclhscXA2eXJhUy8vaE9yQnVYTDlyOS96NjBmZU5sc0gK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzOUE3OTA0QTA0NTgyNkYKUldSdmdrV2dCSG1hVTRuSnZUWUp0RDBBNVhxejZkOU5MeUFXQlg4QS9BajJWdXdDZWFKNlk2V3EK",
       "endpoints": [
         "https://github.com/linshiqiyyds/Weunix-JLevcDormroom/releases/latest/download/latest.json",
         "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/raw/main/latest.json"

@@ -190,7 +190,7 @@ class OpidCaptureAssistant:
                 return
             self.captured_openid = openid
             self.importing_openid = openid
-        self.state.log("success", f"自动取号助手已捕获 wxopid：{self._mask(openid)}")
+        self.state.log("success", f"自动取号助手已捕获登录标识：{self._mask(openid)}")
         try:
             account = self.state.add_account(openid, self.nickname, self.tag, "")
             with self.lock:
@@ -459,13 +459,13 @@ class RuntimeState:
         self.statuses = {}
         self.running = {}
         self.cfg = load_cfg()
-        self.pref = self.cfg.get("pref", "1,2")
+        self.pref = self.cfg.get("pref", "1")
         self.open_time = self.cfg.get("open_time", "")
         self.mask_sensitive = bool(self.cfg.get("mask_sensitive", True))
         raw_accounts = [Account.from_dict(a) for a in self.cfg.get("accounts", []) if a.get("openid")]
         self.accounts = [acc for acc in raw_accounts if is_probably_wxopid(acc.openid)]
         if len(self.accounts) != len(raw_accounts):
-            self.log("warning", "已忽略 wxce/appid 等非 wxopid 账号，请重新扫码获取 o... 开头的 opid。")
+            self.log("warning", "已忽略无效账号凭据，请重新扫码获取 o... 开头的登录标识。")
             self.save()
         self.server_latency_ms = None
         self.last_ping_at = 0.0
@@ -535,12 +535,12 @@ class RuntimeState:
     def add_account(self, raw_openid, nickname="", tag="", college=""):
         openid = extract_openid_like(raw_openid)
         if not openid:
-            raise ValueError("未识别到有效 openid / wxopid")
+            raise ValueError("未识别到有效登录标识")
         if not is_probably_wxopid(openid):
-            raise ValueError("这不是可登录的 wxopid/opid。wxce... 是公众号 appid，不能用于自动登录；请粘贴 o... 开头的 opid，或粘贴带 code= 的微信回调链接让程序换取。")
+            raise ValueError("这不是可登录的账号凭据。wx... 开头的是应用标识，不能用于自动登录；请粘贴 o... 开头的登录标识，或粘贴扫码后的回调链接让程序尝试换取。")
         auto_data = request_json(make_session(), auth_api_path("IsAutoLogin"), params={"wxopid": openid})
         if not (auto_data.get("code") == 1 and bool(auto_data.get("result"))):
-            raise ValueError(api_message(auto_data, "自动登录未通过：这个 opid 不能用于当前服务，请重新获取 o... 开头的 wxopid。", "自动登录接口"))
+            raise ValueError(api_message(auto_data, "自动登录未通过：这个登录标识不能用于当前服务，请重新获取 o... 开头的登录标识。", "自动登录接口"))
         with self.lock:
             if any(a.openid == openid for a in self.accounts):
                 raise ValueError("账号已存在")
@@ -670,7 +670,7 @@ class RuntimeState:
             for engine in self.engines.values():
                 engine.stop_grab()
             self.accounts = [Account.from_dict(a) for a in self.cfg.get("accounts", []) if a.get("openid")]
-            self.pref = self.cfg.get("pref", "1,2")
+            self.pref = self.cfg.get("pref", "1")
             self.open_time = self.cfg.get("open_time", "")
             self.mask_sensitive = bool(self.cfg.get("mask_sensitive", True))
             self.engines = {acc.uid: GrabberEngine(acc, self.queue) for acc in self.accounts}
@@ -701,7 +701,7 @@ class RuntimeState:
             text = "；".join([
                 f"账号：{acc.display_name if acc else '全部账号'}",
                 f"标签：{acc.tag if acc else '无'}",
-                f"openid：{openid}",
+                f"登录标识：{openid}",
                 f"步骤：{status}",
                 f"结果：{result}",
                 f"建议：{self._diagnostic_suggestion(result)}",
@@ -717,7 +717,7 @@ class RuntimeState:
         if "code" in text and ("过期" in text or "使用" in text):
             return "二维码 code 已使用或过期，请重新扫码获取。"
         if "Token" in text or "登录" in text or "认证" in text:
-            return "重新同步账号，必要时重新扫码获取 wxopid。"
+            return "重新同步账号，必要时重新扫码获取登录标识。"
         if "资源 0" in text or "0 条" in text:
             return "接口正常但当前无可用资源，请等待开放或调整偏好。"
         if "超时" in text or "timeout" in text.lower():
@@ -732,7 +732,7 @@ class RuntimeState:
     def resolve_wxcode(self, wxcode):
         data = request_json(make_session(), auth_api_path("GetWxOpenidByWxCode"), params={"wxcode": wxcode})
         if data.get("code") != 1:
-            message = api_message(data, "wxcode 换取 openid 失败", "微信授权")
+            message = api_message(data, "二维码临时凭据换取登录标识失败", "微信授权")
             if "40163" in json.dumps(data, ensure_ascii=False):
                 message = "二维码 code 已使用或过期，请重新扫码。"
             raise ValueError(message)
@@ -745,9 +745,9 @@ class RuntimeState:
         openid = result.get("openid") or result.get("wxopid") or result.get("OpenId") or result.get("WxOpenId")
         openid = extract_openid_like(str(openid or ""))
         if not openid:
-            raise ValueError("接口未返回可用 openid")
+            raise ValueError("接口未返回可用登录标识")
         if not is_probably_wxopid(openid):
-            raise ValueError("微信接口返回的不是可登录 opid。wxce... 是 appid，不能用于自动登录；请确认复制的是带 code= 的回调链接，不是页面里的 result/appid。")
+            raise ValueError("微信接口返回的不是可登录账号凭据。wx... 开头的是应用标识，不能用于自动登录；请确认复制的是扫码后的回调链接。")
         return {"openid": openid, "raw": data}
 
     def wx_params(self):

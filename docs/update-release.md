@@ -28,7 +28,7 @@ https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/raw/main/latest.json
 当前本机私钥位置：
 
 ```powershell
-E:\Weunix\.secrets\weunix-updater.key
+E:\Weunix\.secrets\weunix-updater-v2.key
 ```
 
 如果私钥丢失，旧版本客户端无法信任新签名，软件内更新链路需要重新规划。
@@ -39,13 +39,13 @@ E:\Weunix\.secrets\weunix-updater.key
 
 ```powershell
 cd E:\Weunix\desktop\gui
-npx tauri signer generate --ci --write-keys ..\..\.secrets\weunix-updater.key
+npx tauri signer generate --ci --write-keys ..\..\.secrets\weunix-updater-v2.key
 ```
 
 命令会生成：
 
-- `.secrets\weunix-updater.key`：私钥，本地保存
-- `.secrets\weunix-updater.key.pub`：公钥，可以写入 `desktop/gui/src-tauri/tauri.conf.json`
+- `.secrets\weunix-updater-v2.key`：私钥，本地保存
+- `.secrets\weunix-updater-v2.key.pub`：公钥，可以写入 `desktop/gui/src-tauri/tauri.conf.json`
 
 更安全的做法是给私钥设置密码，并在发布时配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
@@ -71,11 +71,11 @@ py -3 test_all.py
 3. 设置签名私钥环境变量
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY=(Get-Content -Raw "E:\Weunix\.secrets\weunix-updater.key")
+$env:TAURI_SIGNING_PRIVATE_KEY=(Get-Content -Raw "E:\Weunix\.secrets\weunix-updater-v2.key")
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 ```
 
-当前 Tauri build 对 updater 产物签名需要读取 `TAURI_SIGNING_PRIVATE_KEY`。只设置 `TAURI_SIGNING_PRIVATE_KEY_PATH` 可能仍然提示找不到私钥。
+当前使用的 `weunix-updater-v2.key` 是本地无密码发布 key。Tauri build 阶段需要读取 `TAURI_SIGNING_PRIVATE_KEY`，所以用 `Get-Content -Raw` 只把私钥内容放进当前 PowerShell 进程环境变量。私钥仍然只放在 `.secrets/`，不要提交到仓库。
 
 如果私钥有密码，把空字符串替换为你的密码：
 

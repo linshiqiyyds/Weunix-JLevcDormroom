@@ -14,6 +14,7 @@ debug.log.*
 *.log
 exe_smoke_result.json
 probe_results.json
+*.masked.json
 
 # Python cache and virtual environments
 __pycache__/

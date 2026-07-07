@@ -1,10 +1,10 @@
 {
     "version":  "0.2.0",
-    "notes":  "WeUnix desktop update.",
-    "pub_date":  "2026-07-06T17:11:28Z",
+    "notes":  "WeUnix 0.2.0: refined onboarding manual, clearer account import wording, default 4-person preference, payment QR tracking, and safer release package.",
+    "pub_date":  "2026-07-07T08:27:44Z",
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUi9jUmtUU3ZDYkdzNzFySmJjZUFZM1ROZWdYYjY0Q3JLNU00ME5wYnRpM0ZpbmRwbXZhdDRkdVRhMmRZVEdyOHZCWVE4cExsYXZFMlU1cXhWSG5nSVg1RjArRkt4Z1FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzMzU3ODY4CWZpbGU6V2VVbml4XzAuMi4wX3g2NF96aC1DTi5tc2kKUHZERkhEYjNXaDFaY0dtbzBNc2xGQmNTMXFVRlVuSURiVVVhUDR0UDVhdUE4VWNvUnJxYndGbE9jaXhOTGpOSm5wYjFvY3A1ZndYV0c2M1FvVUJBRGc9PQo=",
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSdmdrV2dCSG1hVTRmbXNLS0NjTE1tcGZsd0ZyOU01TVNpVERuOUhZOXgxVkd0a1ZJZXVRM2pYbFlsT0xRaHdESFA3cWRGdnRzTC9udWFySHVZQWlXS2VYVE9RS2xHTGdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDEyODQ3CWZpbGU6V2VVbml4XzAuMi4wX3g2NF96aC1DTi5tc2kKQmpRNHZ2OVNtWk1QU1pNYnpoUDJrL29OMDdoQmNDOXBBZnlKRzJrRWR3VTFLWFl4bEd1SnlSTUtBU2ZUa0w2QmtEYkFWRktBL0daYUxpOGtqTXU2Q0E9PQo=",
                                              "url":  "https://gitee.com/lin-seventeen/Weunix-JLevcDormroom/releases/download/v0.2.0/WeUnix_0.2.0_x64_zh-CN.msi"
                                          }
                   }

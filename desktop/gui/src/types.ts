@@ -28,9 +28,24 @@ export interface PreflightPayload {
 export interface RoomPayload {
   room_type?: string;
   roomType?: string;
+  room_type_name?: string;
+  title?: string;
+  name?: string;
   room_charge?: string | number;
+  charge?: string | number;
+  price?: string | number;
+  amount?: string | number;
+  money?: string | number;
+  need_pay_money?: string | number;
   room_bed_num?: string | number;
+  room_bed_count?: string | number;
   bed_num?: string | number;
+  bedNum?: string | number;
+  remain?: string | number;
+  surplus?: string | number;
+  left_count?: string | number;
+  available_count?: string | number;
+  count?: string | number;
   room_type_id?: string | number;
 }
 
@@ -39,6 +54,23 @@ export interface PaymentPayload {
   order_id?: string;
   pay_url?: string;
   message?: string;
+  payment_state?: "waiting" | "pending" | "paid" | "expired" | "unknown";
+  state_label?: string;
+  pay_status?: number | string | null;
+  rest_seconds?: number | null;
+  paid?: boolean;
+  expired?: boolean;
+  room_type?: string;
+  need_pay_money?: string | number;
+  pay_money?: string | number;
+  order_create_time?: string;
+  order_end_time?: string;
+  pay_time?: string;
+  valid_duration?: number | null;
+  room_no?: string;
+  bed_no?: string;
+  bed_id?: string;
+  records_count?: number;
 }
 
 export interface RehearsalPayload {
